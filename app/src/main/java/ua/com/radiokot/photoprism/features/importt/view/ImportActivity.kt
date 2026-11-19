@@ -27,6 +27,7 @@ import ua.com.radiokot.photoprism.databinding.IncludeImportCardContentBinding
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.extension.setThrottleOnClickListener
 import ua.com.radiokot.photoprism.features.albums.view.DestinationAlbumSelectionActivity
+import ua.com.radiokot.photoprism.features.importt.logic.ParseImportIntentUseCase
 import ua.com.radiokot.photoprism.features.importt.view.model.ImportViewModel
 
 class ImportActivity : BaseActivity() {
@@ -216,9 +217,14 @@ class ImportActivity : BaseActivity() {
         ): Intent =
             Intent(context, ImportActivity::class.java)
                 .setAction(Intent.ACTION_SEND_MULTIPLE)
-                .putParcelableArrayListExtra(
-                    Intent.EXTRA_STREAM,
-                    ArrayList(uris),
+                // Passing the URIs through a file, as the intent extras
+                // can't hold thousands of them (TransactionTooLargeException).
+                .putExtra(
+                    ParseImportIntentUseCase.EXTRA_URI_LIST_FILE_PATH,
+                    ParseImportIntentUseCase.writeUriListFile(
+                        cacheDir = context.cacheDir,
+                        uris = uris,
+                    )
                 )
     }
 }

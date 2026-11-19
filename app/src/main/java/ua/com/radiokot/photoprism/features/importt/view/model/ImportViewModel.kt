@@ -11,6 +11,9 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import io.reactivex.rxjava3.core.Single
+import io.reactivex.rxjava3.kotlin.subscribeBy
 import io.reactivex.rxjava3.kotlin.toCompletable
 import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.PublishSubject
@@ -55,13 +58,39 @@ class ImportViewModel(
             return
         }
 
-        files = parseImportIntentUseCase(importIntent)
+        // Querying thousands of URIs takes a while,
+        // so the start is only possible once they are parsed.
+        isStartButtonEnabled.value = false
 
-        summary.value = Summary(
-            libraryRootUrl = session.envConnectionParams.rootUrl.toString(),
-            fileCount = files.size,
-            reportedSizeMb = files.reportedSizeMb,
-        )
+        Single.fromCallable { parseImportIntentUseCase(importIntent) }
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribeBy(
+                onSuccess = { parsedFiles ->
+                    files = parsedFiles
+
+                    summary.value = Summary(
+                        libraryRootUrl = session.envConnectionParams.rootUrl.toString(),
+                        fileCount = parsedFiles.size,
+                        reportedSizeMb = parsedFiles.reportedSizeMb,
+                        albums = albums.map(DestinationAlbum::title),
+                    )
+                    isStartButtonEnabled.value = parsedFiles.isNotEmpty()
+
+                    log.debug {
+                        "initOnce(): files_parsed:" +
+                                "\nsummary=${summary.value}"
+                    }
+                },
+                onError = { error ->
+                    log.error(error) {
+                        "initOnce(): failed_parsing_intent"
+                    }
+
+                    eventsSubject.onNext(Event.Finish)
+                }
+            )
+            .autoDispose(this)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
             && !context.isSelfPermissionGranted(Manifest.permission.ACCESS_MEDIA_LOCATION)
@@ -83,7 +112,6 @@ class ImportViewModel(
 
         log.debug {
             "initOnce(): initialized:" +
-                    "\nsummary=${summary.value}," +
                     "\npermissionsToCheckBeforeStart=$permissionsToCheckBeforeStart"
         }
     }
@@ -134,7 +162,7 @@ class ImportViewModel(
 
         this.albums = selectedAlbums
 
-        summary.value = summary.value!!.copy(
+        summary.value = summary.value?.copy(
             albums = selectedAlbums.map(DestinationAlbum::title),
         )
     }

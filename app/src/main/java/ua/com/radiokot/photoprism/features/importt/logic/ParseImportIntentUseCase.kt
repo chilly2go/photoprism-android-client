@@ -7,6 +7,7 @@ import android.provider.MediaStore.MediaColumns
 import androidx.core.database.getLongOrNull
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.importt.model.ImportableFile
+import java.io.File
 
 class ParseImportIntentUseCase(
     private val contentResolver: ContentResolver,
@@ -23,6 +24,19 @@ class ParseImportIntentUseCase(
         val uris = mutableSetOf<Uri>()
         intent.data?.also(uris::add)
 
+        // A large selection is passed as a file,
+        // as the intent extras can't hold thousands of URIs.
+        intent.getStringExtra(EXTRA_URI_LIST_FILE_PATH)
+            ?.let(::File)
+            ?.also { uriListFile ->
+                uriListFile
+                    .readLines()
+                    .filter(String::isNotBlank)
+                    .mapTo(uris, Uri::parse)
+
+                uriListFile.delete()
+            }
+
         @Suppress("DEPRECATION")
         when (intent.action) {
             Intent.ACTION_SEND ->
@@ -32,6 +46,11 @@ class ParseImportIntentUseCase(
             Intent.ACTION_SEND_MULTIPLE ->
                 intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
                     ?.also(uris::addAll)
+        }
+
+        log.debug {
+            "invoke(): parsing_uris:" +
+                    "\nuris=${uris.size}"
         }
 
         check(uris.isNotEmpty()) {
@@ -90,6 +109,30 @@ class ParseImportIntentUseCase(
                 reportedSize = reportedSize,
                 displayName = displayName,
             )
+        }
+    }
+
+    companion object {
+        /**
+         * Path of a text file with one content URI per line.
+         * The file is deleted once read.
+         */
+        const val EXTRA_URI_LIST_FILE_PATH = "uri_list_file_path"
+
+        /**
+         * Writes the [uris] to a file in the [cacheDir]
+         * to be passed with [EXTRA_URI_LIST_FILE_PATH].
+         *
+         * @return the file path
+         */
+        fun writeUriListFile(
+            cacheDir: File,
+            uris: Collection<Uri>,
+        ): String {
+            val directory = File(cacheDir, "import_uri_lists").apply { mkdirs() }
+            val file = File(directory, "${System.currentTimeMillis()}.txt")
+            file.writeText(uris.joinToString(separator = "\n"))
+            return file.path
         }
     }
 }
