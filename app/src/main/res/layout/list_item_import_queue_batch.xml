@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    style="@style/Widget.Material3.CardView.Filled"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:id="@+id/title_text_view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="?textAppearanceTitleMedium"
+            tools:text="19. Nov. 2026, 14:05" />
+
+        <TextView
+            android:id="@+id/state_text_view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textAppearance="?textAppearanceBodyMedium"
+            android:textColor="?colorPrimary"
+            tools:text="Wird hochgeladen · Album: Urlaub" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progress_indicator"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:trackCornerRadius="4dp"
+            tools:progress="40" />
+
+        <TextView
+            android:id="@+id/counts_text_view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textAppearance="?textAppearanceBodyMedium"
+            tools:text="45 von 109 Dateien erledigt\n40 hinzugefügt · 3 schon vorhanden · 2 fehlgeschlagen" />
+
+        <TextView
+            android:id="@+id/failed_title_text_view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/import_queue_failed_files"
+            android:textAppearance="?textAppearanceLabelLarge"
+            android:textColor="?colorError" />
+
+        <TextView
+            android:id="@+id/failed_files_text_view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="?textAppearanceBodySmall"
+            android:textIsSelectable="true"
+            tools:text="IMG_0001.HEIC – Upload failed: HTTP 413\nIMG_0002.HEIC – Not found in the library after the import" />
+
+        <com.google.android.flexbox.FlexboxLayout
+            android:id="@+id/buttons_layout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            app:flexWrap="wrap"
+            app:justifyContent="flex_end">
+
+            <Button
+                android:id="@+id/retry_failed_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/import_queue_retry_failed" />
+
+            <Button
+                android:id="@+id/cancel_waiting_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/import_queue_cancel_waiting" />
+
+            <Button
+                android:id="@+id/remove_button"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/import_queue_remove" />
+        </com.google.android.flexbox.FlexboxLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

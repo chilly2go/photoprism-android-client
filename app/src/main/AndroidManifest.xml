@@ -242,6 +242,12 @@
         </activity>
 
         <activity
+            android:name=".features.importt.queue.view.ImportQueueActivity"
+            android:exported="false"
+            android:label="@string/import_queue_title"
+            android:resizeableActivity="true" />
+
+        <activity
             android:name=".features.albums.view.AlbumsActivity"
             android:exported="false"
             android:resizeableActivity="true"

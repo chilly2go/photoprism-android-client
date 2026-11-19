@@ -15,6 +15,9 @@ import ua.com.radiokot.photoprism.R
 import ua.com.radiokot.photoprism.extension.barsAndCutout
 import ua.com.radiokot.photoprism.features.gallery.search.view.GallerySearchBarView
 import ua.com.radiokot.photoprism.features.gallery.view.model.GalleryViewModel
+import android.content.Context
+import android.content.Intent
+import ua.com.radiokot.photoprism.features.importt.queue.view.ImportQueueActivity
 
 class GalleryNavigationView(
     private val viewModel: GalleryViewModel,
@@ -34,6 +37,7 @@ class GalleryNavigationView(
     ) {
         initMenu(
             navigationMenu = navigationView.menu,
+            context = navigationView.context,
             onItemClicked = drawerLayout::close,
         )
 
@@ -66,11 +70,13 @@ class GalleryNavigationView(
     ) {
         initMenu(
             navigationMenu = navigationRail.menu,
+            context = navigationRail.context,
         )
     }
 
     private fun initMenu(
         navigationMenu: Menu,
+        context: Context,
         onItemClicked: () -> Unit = {},
     ) {
         fun getClickListener(extraAction: () -> Any) = MenuItem.OnMenuItemClickListener {
@@ -98,6 +104,11 @@ class GalleryNavigationView(
 
         navigationMenu.findItem(R.id.folders)
             .setOnMenuItemClickListener(getClickListener(viewModel::onFoldersClicked))
+
+        navigationMenu.findItem(R.id.upload_queue)
+            ?.setOnMenuItemClickListener(getClickListener {
+                context.startActivity(Intent(context, ImportQueueActivity::class.java))
+            })
 
         navigationMenu.findItem(R.id.preferences)
             .setOnMenuItemClickListener(getClickListener(viewModel::onPreferencesClicked))

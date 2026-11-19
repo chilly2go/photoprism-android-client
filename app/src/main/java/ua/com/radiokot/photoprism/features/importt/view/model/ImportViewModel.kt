@@ -7,35 +7,30 @@ import android.os.Build
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.OutOfQuotaPolicy
-import androidx.work.WorkManager
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.kotlin.subscribeBy
 import io.reactivex.rxjava3.kotlin.toCompletable
 import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.PublishSubject
-import ua.com.radiokot.photoprism.di.JsonObjectMapper
 import ua.com.radiokot.photoprism.env.data.model.EnvSession
 import ua.com.radiokot.photoprism.extension.autoDispose
 import ua.com.radiokot.photoprism.extension.isSelfPermissionGranted
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.extension.observeOnMain
 import ua.com.radiokot.photoprism.features.albums.data.model.DestinationAlbum
-import ua.com.radiokot.photoprism.features.importt.logic.ImportFilesWorker
 import ua.com.radiokot.photoprism.features.importt.logic.ParseImportIntentUseCase
+import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueRepository
+import ua.com.radiokot.photoprism.features.importt.queue.logic.ImportQueueWorker
 import ua.com.radiokot.photoprism.features.importt.model.ImportableFile
 import ua.com.radiokot.photoprism.features.importt.model.reportedSizeMb
 import ua.com.radiokot.photoprism.features.albums.data.storage.AlbumsRepository
-import java.io.File
 
 class ImportViewModel(
     private val parseImportIntentUseCase: ParseImportIntentUseCase,
     private val albumsRepository: AlbumsRepository,
     private val session: EnvSession,
-    private val jsonObjectMapper: JsonObjectMapper,
+    private val importQueueRepository: ImportQueueRepository,
     application: Application,
 ) : AndroidViewModel(application) {
     private val log = kLogger("ImportVM")
@@ -44,7 +39,6 @@ class ImportViewModel(
     private lateinit var files: List<ImportableFile>
     private val permissionsToCheckBeforeStart = mutableListOf<String>()
     private var albums: Set<DestinationAlbum> = emptySet()
-    private val uploadUniqueName = "${ImportFilesWorker.TAG}:${System.currentTimeMillis()}"
 
     val summary: MutableLiveData<Summary> = MutableLiveData()
     val isNotificationPermissionRationaleVisible: MutableLiveData<Boolean> = MutableLiveData(false)
@@ -186,42 +180,38 @@ class ImportViewModel(
         eventsSubject.onNext(Event.ShowStartedInBackgroundMessage)
         isStartButtonEnabled.postValue(false)
 
-        // Allow reading the URIs after the activity is finished.
         files.forEach { file ->
+            val uri = file.contentUri.toUri()
+
+            // Allow reading the URIs after the activity is finished.
             context.grantUriPermission(
                 context.packageName,
-                file.contentUri.toUri(),
+                uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION,
             )
+
+            // The queue may be worked through after the app process is restarted,
+            // which requires a persisted permission. Not all the providers support it.
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            } catch (_: Exception) {
+            }
         }
 
-        // Write list of files to a file to overcome
-        // the WorkManager data size limit.
-        val fileListJsonFile = File(
-            getApplication<Application>().noBackupFilesDir,
-            "${uploadUniqueName}.json"
+        val batchId = importQueueRepository.addBatch(
+            files = files,
+            albums = albums,
+            libraryRootUrl = session.envConnectionParams.rootUrl.toString(),
         )
-        jsonObjectMapper.writeValue(fileListJsonFile, files)
 
-        WorkManager.getInstance(context)
-            .enqueueUniqueWork(
-                uploadUniqueName,
-                ExistingWorkPolicy.REPLACE,
-                OneTimeWorkRequestBuilder<ImportFilesWorker>()
-                    .setInputData(
-                        ImportFilesWorker.getInputData(
-                            fileListJsonFile = fileListJsonFile,
-                            albums = albums,
-                            jsonObjectMapper = jsonObjectMapper,
-                        )
-                    )
-                    .addTag(ImportFilesWorker.TAG)
-                    .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                    .build()
-            )
+        ImportQueueWorker.schedule(context)
 
         log.debug {
-            "startImportInBackgroundAndFinish(): finishing_after_start"
+            "startImportInBackgroundAndFinish(): finishing_after_adding_to_queue:" +
+                    "\nbatchId=$batchId"
         }
 
         eventsSubject.onNext(Event.Finish)

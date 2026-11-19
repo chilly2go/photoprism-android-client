@@ -7,8 +7,9 @@ import org.koin.dsl.bind
 import org.koin.dsl.module
 import ua.com.radiokot.photoprism.env.data.model.EnvSession
 import ua.com.radiokot.photoprism.features.albums.albumsFeatureModule
-import ua.com.radiokot.photoprism.features.importt.logic.ImportFilesUseCase
 import ua.com.radiokot.photoprism.features.importt.logic.ParseImportIntentUseCase
+import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueRepository
+import ua.com.radiokot.photoprism.features.importt.queue.view.model.ImportQueueViewModel
 import ua.com.radiokot.photoprism.features.importt.view.ImportNotificationsManager
 import ua.com.radiokot.photoprism.features.importt.view.model.ImportViewModel
 
@@ -16,16 +17,8 @@ val importFeatureModule = module {
     includes(albumsFeatureModule)
 
     scope<EnvSession> {
-        scoped {
-            ImportFilesUseCase(
-                contentResolver = androidApplication().contentResolver,
-                photoPrismSessionService = get(),
-                photoPrismUploadService = get(),
-                albumsRepository = getOrNull(),
-            )
-        } bind ImportFilesUseCase::class
-
         viewModelOf(::ImportViewModel)
+        viewModelOf(::ImportQueueViewModel)
     }
 
     single {
@@ -35,4 +28,5 @@ val importFeatureModule = module {
     } bind ParseImportIntentUseCase::class
 
     singleOf(::ImportNotificationsManager)
+    singleOf(::ImportQueueRepository)
 }

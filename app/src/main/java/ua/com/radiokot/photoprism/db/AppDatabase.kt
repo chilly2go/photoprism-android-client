@@ -8,17 +8,22 @@ import ua.com.radiokot.photoprism.features.ext.memories.data.model.MemoryDbEntit
 import ua.com.radiokot.photoprism.features.ext.memories.data.storage.MemoriesDbDao
 import ua.com.radiokot.photoprism.features.gallery.data.model.SearchBookmarksDbEntity
 import ua.com.radiokot.photoprism.features.gallery.data.storage.SearchBookmarksDbDao
-
+import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueBatchDbEntity
+import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemDbEntity
+import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueDbDao
 @Database(
-    version = 8,
+    version = 9,
     entities = [
         SearchBookmarksDbEntity::class,
         MemoryDbEntity::class,
+        ImportQueueBatchDbEntity::class,
+        ImportQueueItemDbEntity::class,
     ],
     autoMigrations = [
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
         AutoMigration(from = 6, to = 7),
+        AutoMigration(from = 8, to = 9),
     ],
     exportSchema = true,
 )
@@ -30,4 +35,5 @@ import ua.com.radiokot.photoprism.features.gallery.data.storage.SearchBookmarksD
 abstract class AppDatabase : RoomDatabase() {
     abstract fun bookmarks(): SearchBookmarksDbDao
     abstract fun memories(): MemoriesDbDao
+    abstract fun importQueue(): ImportQueueDbDao
 }
