@@ -337,4 +337,23 @@
     <string name="panorama_view_use_phone_movement">Telefonbewegung nutzen</string>
     <string name="panorama_view_only_use_gestures">Nur Gesten nutzen</string>
 
+    <string name="local_media_picker_title">Dateien zum Hochladen wählen</string>
+    <string name="local_media_picker_hide_in_library">Hochgeladene ausblenden</string>
+    <string name="local_media_picker_in_library">Schon in der Bibliothek</string>
+    <string name="local_media_picker_all_folders">Alle</string>
+    <string name="template_local_media_picker_bucket">%1$s · %2$d</string>
+    <string name="template_local_media_picker_checking">Abgleich mit der Bibliothek: %1$d von %2$d</string>
+    <string name="template_local_media_picker_checked">%1$d von %2$d schon in der Bibliothek</string>
+    <string name="local_media_picker_library_unavailable">Bibliothek nicht erreichbar, nichts wird ausgeblendet</string>
+    <string name="template_local_media_picker_selected">%1$d ausgewählt</string>
+    <string name="template_local_media_picker_continue">Weiter (%1$d)</string>
+    <string name="local_media_picker_select_all">Alle angezeigten auswählen</string>
+    <string name="local_media_picker_clear_selection">Auswahl aufheben</string>
+    <string name="local_media_picker_system_picker">Systemauswahl verwenden</string>
+    <string name="local_media_picker_nothing_missing">Hier ist schon alles in der Bibliothek</string>
+    <string name="local_media_picker_checking_empty">Suche Dateien, die noch nicht in der Bibliothek sind…</string>
+    <string name="local_media_picker_no_media">Keine Fotos oder Videos auf diesem Gerät</string>
+    <string name="local_media_picker_permission_missing">Um zu zeigen, welche Fotos noch nicht in der Bibliothek sind, braucht die App Zugriff auf Fotos und Videos</string>
+    <string name="local_media_picker_grant_access">Zugriff erlauben</string>
+    <string name="template_local_media_picker_sd_card_bucket">%1$s (SD-Karte)</string>
 </resources>

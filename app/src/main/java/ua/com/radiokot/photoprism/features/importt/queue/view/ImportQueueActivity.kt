@@ -6,7 +6,9 @@ import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.ViewGroup
+import androidx.core.view.ViewCompat
 import androidx.core.view.isVisible
+import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -15,6 +17,7 @@ import ua.com.radiokot.photoprism.R
 import ua.com.radiokot.photoprism.base.view.BaseActivity
 import ua.com.radiokot.photoprism.databinding.ActivityImportQueueBinding
 import ua.com.radiokot.photoprism.databinding.ListItemImportQueueBatchBinding
+import ua.com.radiokot.photoprism.extension.barsAndCutout
 import ua.com.radiokot.photoprism.extension.barsAndCutoutPadding
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueBatch
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemState
@@ -41,6 +44,11 @@ class ImportQueueActivity : BaseActivity() {
         view.toolbar.barsAndCutoutPadding()
 
         view.batchesRecyclerView.adapter = adapter
+        val listPadding = view.batchesRecyclerView.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(view.root) { _, insets ->
+            view.batchesRecyclerView.updatePadding(bottom = listPadding + insets.barsAndCutout().bottom)
+            insets
+        }
 
         viewModel.batches.observe(this) { batches ->
             adapter.submitList(batches)

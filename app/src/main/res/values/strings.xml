@@ -340,4 +340,23 @@
     <string name="is_private">Private</string>
     <string name="panorama_view_use_phone_movement">Use phone movement</string>
     <string name="panorama_view_only_use_gestures">Only use gestures</string>
+    <string name="local_media_picker_title">Choose files to upload</string>
+    <string name="local_media_picker_hide_in_library">Hide uploaded</string>
+    <string name="local_media_picker_in_library">Already in the library</string>
+    <string name="local_media_picker_all_folders">All</string>
+    <string name="template_local_media_picker_bucket">%1$s · %2$d</string>
+    <string name="template_local_media_picker_checking">Checking with the library: %1$d of %2$d</string>
+    <string name="template_local_media_picker_checked">%1$d of %2$d already in the library</string>
+    <string name="local_media_picker_library_unavailable">The library can\'t be reached, nothing is hidden</string>
+    <string name="template_local_media_picker_selected">%1$d selected</string>
+    <string name="template_local_media_picker_continue">Continue (%1$d)</string>
+    <string name="local_media_picker_select_all">Select all shown</string>
+    <string name="local_media_picker_clear_selection">Clear selection</string>
+    <string name="local_media_picker_system_picker">Use the system file picker</string>
+    <string name="local_media_picker_nothing_missing">Everything here is already in the library</string>
+    <string name="local_media_picker_checking_empty">Looking for files which are not in the library yet…</string>
+    <string name="local_media_picker_no_media">No photos or videos on this device</string>
+    <string name="local_media_picker_permission_missing">To show which photos are not in the library yet, the app needs access to photos and videos</string>
+    <string name="local_media_picker_grant_access">Allow access</string>
+    <string name="template_local_media_picker_sd_card_bucket">%1$s (SD card)</string>
 </resources>

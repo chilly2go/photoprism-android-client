@@ -28,7 +28,15 @@ interface PhotoPrismPhotosService {
         @Query("public")
         public: Boolean = true,
         @Query("q")
-        q: String? = null
+        q: String? = null,
+        /**
+         * SHA-1 file hashes separated by |.
+         * Unlike "hash:" in the query, works with many hashes.
+         */
+        @Query("hash")
+        hash: String? = null,
+        @Query("archived")
+        archived: Boolean? = null,
     ): List<PhotoPrismMergedPhoto>
 
     @kotlin.jvm.Throws(IOException::class)

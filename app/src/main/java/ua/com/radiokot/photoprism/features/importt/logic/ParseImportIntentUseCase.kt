@@ -24,6 +24,9 @@ class ParseImportIntentUseCase(
         val uris = mutableSetOf<Uri>()
         intent.data?.also(uris::add)
 
+        // Files already described by the caller don't need to be queried.
+        val knownFiles = mutableMapOf<Uri, ImportableFile>()
+
         // A large selection is passed as a file,
         // as the intent extras can't hold thousands of URIs.
         intent.getStringExtra(EXTRA_URI_LIST_FILE_PATH)
@@ -32,7 +35,19 @@ class ParseImportIntentUseCase(
                 uriListFile
                     .readLines()
                     .filter(String::isNotBlank)
-                    .mapTo(uris, Uri::parse)
+                    .forEach { line ->
+                        val parts = line.split(LIST_FIELD_SEPARATOR)
+                        val uri = Uri.parse(parts[0])
+                        uris += uri
+                        if (parts.size == 4) {
+                            knownFiles[uri] = ImportableFile(
+                                contentUri = parts[0],
+                                displayName = parts[1],
+                                mimeType = parts[2].takeIf(String::isNotEmpty),
+                                reportedSize = parts[3].toLongOrNull()?.takeIf { it > 0 },
+                            )
+                        }
+                    }
 
                 uriListFile.delete()
             }
@@ -58,6 +73,8 @@ class ParseImportIntentUseCase(
         }
 
         return uris.mapNotNull { uri ->
+            knownFiles[uri]?.also { return@mapNotNull it }
+
             val mimeType: String? = contentResolver.getType(uri)
             val reportedSize: Long?
             val displayName: String
@@ -113,8 +130,11 @@ class ParseImportIntentUseCase(
     }
 
     companion object {
+        private const val LIST_FIELD_SEPARATOR = '\t'
+
         /**
-         * Path of a text file with one content URI per line.
+         * Path of a text file with one content URI per line,
+         * optionally followed by tab-separated display name, MIME type and size.
          * The file is deleted once read.
          */
         const val EXTRA_URI_LIST_FILE_PATH = "uri_list_file_path"
@@ -132,6 +152,32 @@ class ParseImportIntentUseCase(
             val directory = File(cacheDir, "import_uri_lists").apply { mkdirs() }
             val file = File(directory, "${System.currentTimeMillis()}.txt")
             file.writeText(uris.joinToString(separator = "\n"))
+            return file.path
+        }
+
+        /**
+         * Writes the [files] to a file in the [cacheDir]
+         * to be passed with [EXTRA_URI_LIST_FILE_PATH],
+         * so they don't have to be queried again.
+         *
+         * @return the file path
+         */
+        fun writeFileListFile(
+            cacheDir: File,
+            files: Collection<ImportableFile>,
+        ): String {
+            fun String.clean() = replace(Regex("[\\t\\r\\n]"), " ")
+
+            val directory = File(cacheDir, "import_uri_lists").apply { mkdirs() }
+            val file = File(directory, "${System.currentTimeMillis()}.txt")
+            file.writeText(files.joinToString(separator = "\n") { importableFile ->
+                listOf(
+                    importableFile.contentUri,
+                    importableFile.displayName.clean(),
+                    importableFile.mimeType?.clean() ?: "",
+                    importableFile.reportedSize?.toString() ?: "",
+                ).joinToString(separator = LIST_FIELD_SEPARATOR.toString())
+            })
             return file.path
         }
     }

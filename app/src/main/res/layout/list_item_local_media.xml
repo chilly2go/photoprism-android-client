@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/focusable_list_item_background"
+    android:clickable="true"
+    android:focusable="true"
+    android:padding="@dimen/list_item_gallery_media_margin"
+    tools:layout_width="100dp">
+
+    <com.google.android.material.imageview.ShapeableImageView
+        android:id="@+id/image_view"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:scaleType="centerCrop"
+        app:layout_constraintDimensionRatio="H,1:1"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:background="@android:color/darker_gray"
+        tools:ignore="ContentDescription" />
+
+    <Space
+        android:id="@+id/image_view_space"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="@id/image_view"
+        app:layout_constraintEnd_toEndOf="@id/image_view"
+        app:layout_constraintHeight_percent="0.9"
+        app:layout_constraintStart_toStartOf="@id/image_view"
+        app:layout_constraintTop_toTopOf="@id/image_view"
+        app:layout_constraintWidth_percent="0.9" />
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/video_image_view"
+        android:layout_width="23dp"
+        android:layout_height="23dp"
+        android:alpha="0.75"
+        android:background="@drawable/list_item_gallery_media_indicator_background"
+        android:padding="4dp"
+        app:layout_constraintStart_toStartOf="@id/image_view_space"
+        app:layout_constraintTop_toTopOf="@id/image_view_space"
+        app:srcCompat="@drawable/ic_video"
+        app:tint="@android:color/white"
+        tools:ignore="ContentDescription" />
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/in_library_image_view"
+        android:layout_width="23dp"
+        android:layout_height="23dp"
+        android:alpha="0.85"
+        android:background="@drawable/list_item_gallery_media_indicator_background"
+        android:contentDescription="@string/local_media_picker_in_library"
+        android:padding="3dp"
+        app:layout_constraintEnd_toEndOf="@id/image_view_space"
+        app:layout_constraintTop_toTopOf="@id/image_view_space"
+        app:srcCompat="@drawable/ic_done"
+        app:tint="@android:color/white" />
+
+    <com.google.android.material.checkbox.MaterialCheckBox
+        android:id="@+id/selection_check_box"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:background="@drawable/checkbox_circle_background"
+        android:backgroundTint="?colorOnSecondaryContainer"
+        android:checked="true"
+        android:clickable="false"
+        android:focusable="false"
+        android:scaleX="1.1"
+        android:scaleY="1.1"
+        android:visibility="gone"
+        app:buttonCompat="@drawable/checkbox_circle_button"
+        app:buttonTint="?colorPrimaryContainer"
+        app:layout_constraintBottom_toBottomOf="@id/image_view_space"
+        app:layout_constraintStart_toStartOf="@id/image_view_space"
+        tools:visibility="visible" />
+</androidx.constraintlayout.widget.ConstraintLayout>

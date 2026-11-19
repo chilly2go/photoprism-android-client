@@ -18,6 +18,12 @@
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
+    <!-- For the upload picker to show local media which are not in the library -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
 
     <!-- ==========MapLibre========== -->
     <!-- Unnecessary permissions to be removed from the merged manifest -->
@@ -240,6 +246,10 @@
                  However, it must be initially enabled in order to appear
                  in old launchers widget list. -->
         </activity>
+
+        <activity
+            android:name=".features.importt.picker.view.LocalMediaPickerActivity"
+            android:exported="false" />
 
         <activity
             android:name=".features.importt.queue.view.ImportQueueActivity"

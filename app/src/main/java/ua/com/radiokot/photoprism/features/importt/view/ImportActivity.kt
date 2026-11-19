@@ -28,6 +28,7 @@ import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.extension.setThrottleOnClickListener
 import ua.com.radiokot.photoprism.features.albums.view.DestinationAlbumSelectionActivity
 import ua.com.radiokot.photoprism.features.importt.logic.ParseImportIntentUseCase
+import ua.com.radiokot.photoprism.features.importt.model.ImportableFile
 import ua.com.radiokot.photoprism.features.importt.view.model.ImportViewModel
 
 class ImportActivity : BaseActivity() {
@@ -224,6 +225,20 @@ class ImportActivity : BaseActivity() {
                     ParseImportIntentUseCase.writeUriListFile(
                         cacheDir = context.cacheDir,
                         uris = uris,
+                    )
+                )
+
+        fun getIntentForFiles(
+            context: Context,
+            files: List<ImportableFile>,
+        ): Intent =
+            Intent(context, ImportActivity::class.java)
+                .setAction(Intent.ACTION_SEND_MULTIPLE)
+                .putExtra(
+                    ParseImportIntentUseCase.EXTRA_URI_LIST_FILE_PATH,
+                    ParseImportIntentUseCase.writeFileListFile(
+                        cacheDir = context.cacheDir,
+                        files = files,
                     )
                 )
     }

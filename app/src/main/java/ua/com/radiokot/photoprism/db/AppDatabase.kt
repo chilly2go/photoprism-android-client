@@ -11,19 +11,23 @@ import ua.com.radiokot.photoprism.features.gallery.data.storage.SearchBookmarksD
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueBatchDbEntity
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemDbEntity
 import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueDbDao
+import ua.com.radiokot.photoprism.features.importt.picker.data.model.LocalMediaHashDbEntity
+import ua.com.radiokot.photoprism.features.importt.picker.data.storage.LocalMediaHashesDbDao
 @Database(
-    version = 9,
+    version = 10,
     entities = [
         SearchBookmarksDbEntity::class,
         MemoryDbEntity::class,
         ImportQueueBatchDbEntity::class,
         ImportQueueItemDbEntity::class,
+        LocalMediaHashDbEntity::class,
     ],
     autoMigrations = [
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
         AutoMigration(from = 6, to = 7),
         AutoMigration(from = 8, to = 9),
+        AutoMigration(from = 9, to = 10),
     ],
     exportSchema = true,
 )
@@ -36,4 +40,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun bookmarks(): SearchBookmarksDbDao
     abstract fun memories(): MemoriesDbDao
     abstract fun importQueue(): ImportQueueDbDao
+    abstract fun localMediaHashes(): LocalMediaHashesDbDao
 }
