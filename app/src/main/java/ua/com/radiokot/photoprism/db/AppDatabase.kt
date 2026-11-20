@@ -14,7 +14,7 @@ import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueu
 import ua.com.radiokot.photoprism.features.importt.picker.data.model.LocalMediaHashDbEntity
 import ua.com.radiokot.photoprism.features.importt.picker.data.storage.LocalMediaHashesDbDao
 @Database(
-    version = 10,
+    version = 11,
     entities = [
         SearchBookmarksDbEntity::class,
         MemoryDbEntity::class,
@@ -28,6 +28,7 @@ import ua.com.radiokot.photoprism.features.importt.picker.data.storage.LocalMedi
         AutoMigration(from = 6, to = 7),
         AutoMigration(from = 8, to = 9),
         AutoMigration(from = 9, to = 10),
+        AutoMigration(from = 10, to = 11),
     ],
     exportSchema = true,
 )

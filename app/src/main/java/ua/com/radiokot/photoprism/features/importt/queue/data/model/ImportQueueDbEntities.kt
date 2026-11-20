@@ -59,6 +59,11 @@ data class ImportQueueItemDbEntity(
     val state: String,
     @ColumnInfo("error")
     val error: String?,
+    /**
+     * Name of [ImportQueueFailureReason].
+     */
+    @ColumnInfo("failure_reason")
+    val failureReason: String? = null,
 ) {
     val itemState: ImportQueueItemState
         get() = ImportQueueItemState.valueOf(state)

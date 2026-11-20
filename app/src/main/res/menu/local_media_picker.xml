@@ -10,6 +10,11 @@
         android:title="@string/local_media_picker_clear_selection"
         app:showAsAction="never" />
     <item
+        android:id="@+id/show_in_library"
+        android:checkable="true"
+        android:title="@string/local_media_picker_show_in_library"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/system_picker"
         android:title="@string/local_media_picker_system_picker"
         app:showAsAction="never" />

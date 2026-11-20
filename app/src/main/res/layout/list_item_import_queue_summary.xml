@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingTop="4dp">
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/summary_card"
+        style="@style/Widget.Material3.CardView.Filled"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/import_queue_thumbnail_margin">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/status_image_view"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_marginEnd="12dp"
+                    app:tint="?colorPrimary"
+                    tools:ignore="ContentDescription"
+                    tools:srcCompat="@drawable/ic_upload" />
+
+                <TextView
+                    android:id="@+id/status_text_view"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textAppearance="?textAppearanceTitleLarge"
+                    tools:text="Wird hochgeladen …" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/progress_text_view"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:textAppearance="?textAppearanceBodyLarge"
+                tools:text="312 von 1.377 erledigt" />
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/progress_indicator"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                app:trackCornerRadius="4dp"
+                app:trackThickness="6dp"
+                tools:progress="25" />
+
+            <com.google.android.flexbox.FlexboxLayout
+                android:id="@+id/buttons_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:flexWrap="wrap"
+                app:justifyContent="flex_start">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/pause_resume_button"
+                    style="@style/Widget.Material3.Button.TonalButton.Icon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    tools:icon="@drawable/ic_pause"
+                    tools:text="@string/import_queue_pause" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/retry_failed_button"
+                    style="@style/Widget.Material3.Button.OutlinedButton.Icon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:icon="@drawable/ic_refresh"
+                    tools:text="Erneut versuchen (3)" />
+            </com.google.android.flexbox.FlexboxLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <HorizontalScrollView
+        android:id="@+id/filter_scroll_view"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:clipToPadding="false"
+        android:paddingHorizontal="@dimen/import_queue_thumbnail_margin"
+        android:scrollbars="none">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/filter_chip_group"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:selectionRequired="true"
+            app:singleLine="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_all"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                tools:text="Alle 1.377" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_pending"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                tools:text="Wartend 1.065" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_imported"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                tools:text="Neu hinzugefügt 290" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_already_in_library"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                tools:text="Schon vorhanden 19" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chip_failed"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                tools:text="Probleme 3" />
+
+        </com.google.android.material.chip.ChipGroup>
+    </HorizontalScrollView>
+</LinearLayout>

@@ -13,6 +13,7 @@ import ua.com.radiokot.photoprism.features.albums.data.model.DestinationAlbum
 import ua.com.radiokot.photoprism.features.importt.model.ImportableFile
 import ua.com.radiokot.photoprism.features.importt.model.ImportableFileRequestBody
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemDbEntity
+import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueFailureReason
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemState
 import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueRepository
 import java.io.IOException
@@ -49,9 +50,7 @@ class ImportQueueProcessor(
 ) {
     private val log = kLogger("ImportQueueProcessor")
 
-    private var batchNumber = 0
     private val unreachableError = AtomicReference<LibraryUnreachableException?>(null)
-    private var batchCount = 0
     private var importedCount = 0
     private var alreadyInLibraryCount = 0
     private var failedCount = 0
@@ -65,14 +64,9 @@ class ImportQueueProcessor(
             val batch = repository.getNextBatch(libraryRootUrl)
                 ?: break
 
-            batchNumber++
-            batchCount = batchNumber - 1 + repository.countBatchesWithPendingItems(libraryRootUrl)
-
             log.debug {
                 "run(): processing_batch:" +
-                        "\nbatchId=${batch.id}," +
-                        "\nbatchNumber=$batchNumber," +
-                        "\nbatchCount=$batchCount"
+                        "\nbatchId=${batch.id}"
             }
 
             val albums = repository.getAlbums(batch)
@@ -123,7 +117,7 @@ class ImportQueueProcessor(
         }
 
         repository.updateItems(items.map { it.copy(state = ImportQueueItemState.UPLOADING.name) })
-        reportProgress(batchId, Phase.UPLOADING)
+        reportProgress(Phase.UPLOADING)
 
         // Check and upload the files in parallel.
         val executor = Executors.newFixedThreadPool(MAX_CONCURRENT_UPLOADS)
@@ -138,7 +132,7 @@ class ImportQueueProcessor(
                             uploadToken = uploadToken,
                         ).also { updatedItem ->
                             repository.updateItems(listOf(updatedItem))
-                            reportProgress(batchId, Phase.UPLOADING)
+                            reportProgress(Phase.UPLOADING)
                         }
                     }
                 })
@@ -161,7 +155,7 @@ class ImportQueueProcessor(
             return
         }
 
-        reportProgress(batchId, Phase.IMPORTING)
+        reportProgress(Phase.IMPORTING)
 
         val importOutcome = processUpload(
             userId = userId,
@@ -180,7 +174,7 @@ class ImportQueueProcessor(
             outcome = importOutcome,
         )
 
-        reportProgress(batchId, Phase.UPLOADING)
+        reportProgress(Phase.UPLOADING)
     }
 
     /**
@@ -208,6 +202,7 @@ class ImportQueueProcessor(
                 return item.copy(
                     state = ImportQueueItemState.FAILED.name,
                     error = "Can't read the file: ${error.message ?: error.javaClass.simpleName}",
+                    failureReason = ImportQueueFailureReason.CANT_READ.name,
                 )
             }
 
@@ -261,6 +256,11 @@ class ImportQueueProcessor(
             itemWithHash.copy(
                 state = ImportQueueItemState.FAILED.name,
                 error = "Upload failed: ${error.describe()}",
+                failureReason =
+                    if ((error as? HttpException)?.code() == HTTP_ENTITY_TOO_LARGE)
+                        ImportQueueFailureReason.TOO_LARGE.name
+                    else
+                        ImportQueueFailureReason.UPLOAD_FAILED.name,
             )
         }
     }
@@ -365,10 +365,16 @@ class ImportQueueProcessor(
 
         val error = (outcome as? ImportOutcome.Rejected)?.message
             ?: "Not found in the library after the import"
+        val failureReason =
+            if (outcome is ImportOutcome.Rejected)
+                ImportQueueFailureReason.IMPORT_REJECTED
+            else
+                ImportQueueFailureReason.NOT_FOUND_AFTER_IMPORT
         repository.updateItems(unconfirmed.map {
             it.copy(
                 state = ImportQueueItemState.FAILED.name,
                 error = error,
+                failureReason = failureReason.name,
             )
         })
         repeat(unconfirmed.size) { failed() }
@@ -501,14 +507,12 @@ class ImportQueueProcessor(
         }
     }
 
-    private fun reportProgress(batchId: Long, phase: Phase) {
-        val (finished, total) = repository.getBatchProgress(batchId)
+    private fun reportProgress(phase: Phase) {
+        val (finished, total) = repository.getProgress(libraryRootUrl)
         onProgress(
             Progress(
-                batchNumber = batchNumber,
-                batchCount = batchCount,
-                finishedInBatch = finished,
-                totalInBatch = total,
+                finishedCount = finished,
+                totalCount = total,
                 phase = phase,
             )
         )
@@ -560,10 +564,11 @@ class ImportQueueProcessor(
     }
 
     data class Progress(
-        val batchNumber: Int,
-        val batchCount: Int,
-        val finishedInBatch: Int,
-        val totalInBatch: Int,
+        /**
+         * Finished items of all the batches of the library.
+         */
+        val finishedCount: Int,
+        val totalCount: Int,
         val phase: Phase,
     )
 
@@ -575,6 +580,7 @@ class ImportQueueProcessor(
 
     private companion object {
         private const val CHUNK_SIZE = 20
+        private const val HTTP_ENTITY_TOO_LARGE = 413
         private const val MAX_CONCURRENT_UPLOADS = 4
         private const val MAX_UPLOAD_RETRIES = 3
         private const val MAX_CHECK_RETRIES = 2

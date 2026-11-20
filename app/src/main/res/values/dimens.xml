@@ -49,4 +49,7 @@
     <dimen name="map_image_width">64dp</dimen>
     <dimen name="map_attribution_margin">8dp</dimen>
     <dimen name="map_compass_margin">8dp</dimen>
+    <dimen name="import_queue_list_padding">12dp</dimen>
+    <dimen name="import_queue_thumbnail_margin">2dp</dimen>
+    <dimen name="import_queue_min_thumbnail_size">96dp</dimen>
 </resources>

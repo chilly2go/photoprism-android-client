@@ -17,27 +17,40 @@
         app:title="@string/import_queue_title" />
 
     <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/batches_recycler_view"
+        android:id="@+id/recycler_view"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:clipToPadding="false"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="@dimen/import_queue_list_padding"
         android:paddingBottom="16dp"
-        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/toolbar"
-        tools:listitem="@layout/list_item_import_queue_batch" />
+        app:layout_constraintTop_toBottomOf="@id/toolbar" />
 
-    <TextView
-        android:id="@+id/empty_text_view"
+    <LinearLayout
+        android:id="@+id/empty_layout"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/import_queue_empty"
-        android:textAppearance="?textAppearanceBodyLarge"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/toolbar"
-        tools:visibility="visible" />
+        tools:visibility="visible">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            app:srcCompat="@drawable/ic_cloud_done"
+            app:tint="?colorOutline"
+            tools:ignore="ContentDescription" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/import_queue_empty"
+            android:textAppearance="?textAppearanceBodyLarge" />
+    </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

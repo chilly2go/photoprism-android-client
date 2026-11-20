@@ -62,13 +62,7 @@ class ImportNotificationsManager(
                 .setProgress(100, 0, true)
         } else {
             builder
-                .setContentTitle(
-                    context.getString(
-                        R.string.template_import_queue_progress_title,
-                        progress.batchNumber,
-                        progress.batchCount,
-                    )
-                )
+                .setContentTitle(context.getString(R.string.import_queue_progress_title))
                 .setContentText(
                     context.getString(
                         when (progress.phase) {
@@ -78,13 +72,13 @@ class ImportNotificationsManager(
                             ImportQueueProcessor.Phase.IMPORTING ->
                                 R.string.template_import_queue_progress_importing
                         },
-                        progress.finishedInBatch,
-                        progress.totalInBatch,
+                        progress.finishedCount,
+                        progress.totalCount,
                     )
                 )
                 .setProgress(
-                    progress.totalInBatch.coerceAtLeast(1),
-                    progress.finishedInBatch,
+                    progress.totalCount.coerceAtLeast(1),
+                    progress.finishedCount,
                     false
                 )
         }

@@ -3,17 +3,17 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
-        android:id="@+id/pause"
-        android:title="@string/import_queue_pause"
-        app:showAsAction="ifRoom" />
+        android:id="@+id/remove_done"
+        android:title="@string/import_queue_remove_done"
+        app:showAsAction="never" />
 
     <item
-        android:id="@+id/resume"
-        android:title="@string/import_queue_resume"
-        app:showAsAction="ifRoom" />
+        android:id="@+id/remove_failed"
+        android:title="@string/import_queue_remove_failed"
+        app:showAsAction="never" />
 
     <item
-        android:id="@+id/remove_finished"
-        android:title="@string/import_queue_remove_finished"
+        android:id="@+id/remove_pending"
+        android:title="@string/import_queue_remove_pending"
         app:showAsAction="never" />
 </menu>

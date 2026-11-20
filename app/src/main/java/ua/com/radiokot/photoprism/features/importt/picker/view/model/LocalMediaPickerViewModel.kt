@@ -1,5 +1,6 @@
 package ua.com.radiokot.photoprism.features.importt.picker.view.model
 
+import android.net.Uri
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -44,6 +45,12 @@ class LocalMediaPickerViewModel(
     val items: LiveData<List<Item>> = _items
     private val _buckets = MutableLiveData<List<Bucket>>(emptyList())
     val buckets: LiveData<List<Bucket>> = _buckets
+    private val _selectedBucket = MutableLiveData<Bucket?>(null)
+
+    /**
+     * The folder to show the media from, or null for all of them.
+     */
+    val selectedBucket: LiveData<Bucket?> = _selectedBucket
     private val _checkProgress = MutableLiveData<CheckProgress?>(null)
     val checkProgress: LiveData<CheckProgress?> = _checkProgress
     private val _selectedCount = MutableLiveData(0)
@@ -87,7 +94,6 @@ class LocalMediaPickerViewModel(
             media.forEach { statusById[it.id] = Status.UNKNOWN }
         }
 
-        _buckets.postValue(getBuckets(media))
         postState()
 
         val hashExecutor = Executors.newFixedThreadPool(HASHING_THREADS)
@@ -105,40 +111,35 @@ class LocalMediaPickerViewModel(
         log.debug { "loadAndCheck(): done" }
     }
 
-    private fun getBuckets(media: List<LocalMedia>): List<Bucket> {
-        val buckets = media
+    /**
+     * Must be called under the [lock].
+     */
+    private fun getBuckets(): List<Bucket> =
+        allMedia
             .filter { it.bucketId != null }
             .groupBy { it.bucketId!! }
             .map { (bucketId, bucketMedia) ->
-                val first = bucketMedia.first()
+                // Media is sorted from the newest.
+                val newest = bucketMedia.first()
+                val isFullyChecked = bucketMedia.none { statusById[it.id] == Status.UNKNOWN }
                 Bucket(
                     id = bucketId,
-                    name = first.bucketName ?: bucketId,
+                    name = newest.bucketName ?: bucketId,
+                    path = newest.bucketPath
+                        ?.trim('/')
+                        ?.takeIf(String::isNotEmpty),
                     count = bucketMedia.size,
-                    isOnSdCard = first.isOnSdCard,
-                ) to first.bucketPath
-            }
-
-        // Folders with the same name are told apart by their path.
-        val duplicateNames = buckets
-            .groupingBy { it.first.name }
-            .eachCount()
-            .filterValues { it > 1 }
-            .keys
-
-        return buckets
-            .map { (bucket, path) ->
-                if (bucket.name in duplicateNames && path != null)
-                    bucket.copy(name = path)
-                else
-                    bucket
+                    missingCount =
+                        if (isFullyChecked && !isLibraryUnavailable)
+                            bucketMedia.count { statusById[it.id] != Status.IN_LIBRARY }
+                        else
+                            null,
+                    isOnSdCard = newest.isOnSdCard,
+                    coverUri = newest.uri,
+                )
             }
             .sortedByDescending(Bucket::count)
-    }
 
-    /**
-     * @return next media to check, preferring the selected folder.
-     */
     private fun getNextBundle(): List<LocalMedia>? = synchronized(lock) {
         val unknown = allMedia.filter { statusById[it.id] == Status.UNKNOWN }
         if (unknown.isEmpty()) {
@@ -213,8 +214,10 @@ class LocalMediaPickerViewModel(
         val items: List<Item>
         val progress: CheckProgress
         val selectedCount: Int
+        val buckets: List<Bucket>
 
         synchronized(lock) {
+            buckets = getBuckets()
             // Keep the selection only for media which can be seen.
             items = allMedia
                 .asSequence()
@@ -244,6 +247,8 @@ class LocalMediaPickerViewModel(
             selectedCount = selectedIds.size
         }
 
+        _buckets.postValue(buckets)
+        _selectedBucket.postValue(buckets.find { it.id == selectedBucketId })
         _items.postValue(items)
         _checkProgress.postValue(progress)
         _selectedCount.postValue(selectedCount)
@@ -336,8 +341,18 @@ class LocalMediaPickerViewModel(
     data class Bucket(
         val id: String,
         val name: String,
+        /**
+         * Path of the folder on its storage, like DCIM/Camera.
+         */
+        val path: String?,
         val count: Int,
+        /**
+         * Count of media which is not in the library yet,
+         * or null if it is not known yet.
+         */
+        val missingCount: Int?,
         val isOnSdCard: Boolean,
+        val coverUri: Uri,
     )
 
     data class CheckProgress(

@@ -7,10 +7,11 @@ import ua.com.radiokot.photoprism.di.JsonObjectMapper
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.albums.data.model.DestinationAlbum
 import ua.com.radiokot.photoprism.features.importt.model.ImportableFile
-import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueBatch
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueBatchDbEntity
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemDbEntity
+import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueFailureReason
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemState
+import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueOverview
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueStateCount
 import java.util.Date
 
@@ -86,47 +87,46 @@ class ImportQueueRepository(
         return batchId
     }
 
-    fun getBatches(): List<ImportQueueBatch> {
-        val countsByBatch = dao.getStateCounts().groupBy { it.batchId }
-        val failedItemsByBatch = dao
-            .getItemsInState(ImportQueueItemState.FAILED.name)
-            .groupBy { it.batchId }
-
-        return dao.getBatches().map { batch ->
-            ImportQueueBatch(
-                id = batch.id,
-                createdAt = Date(batch.createdAtMs),
-                albums = readAlbums(batch.albumsJson),
-                countsByState = countsByBatch[batch.id]
-                    .orEmpty()
-                    .associate { ImportQueueItemState.valueOf(it.state) to it.count },
-                failedItems = failedItemsByBatch[batch.id]
-                    .orEmpty()
-                    .map { item ->
-                        ImportQueueBatch.FailedItem(
-                            displayName = item.displayName,
-                            error = item.error,
-                        )
-                    },
-            )
-        }
-    }
+    fun getOverview(): ImportQueueOverview =
+        ImportQueueOverview(
+            batches = dao.getBatches().map { batch ->
+                ImportQueueOverview.Batch(
+                    id = batch.id,
+                    createdAt = Date(batch.createdAtMs),
+                    albums = readAlbums(batch.albumsJson),
+                )
+            },
+            items = dao.getAllItems().map { item ->
+                ImportQueueOverview.Item(
+                    id = item.id,
+                    batchId = item.batchId,
+                    contentUri = item.contentUri,
+                    displayName = item.displayName,
+                    mimeType = item.mimeType,
+                    state = item.itemState,
+                    failureReason = item.failureReason
+                        ?.let { name -> ImportQueueFailureReason.values().find { it.name == name } },
+                    error = item.error,
+                )
+            },
+        )
 
     fun getNextBatch(libraryRootUrl: String): ImportQueueBatchDbEntity? =
         dao.getNextBatch(libraryRootUrl, ImportQueueItemState.PENDING.name)
 
-    fun countBatchesWithPendingItems(libraryRootUrl: String): Int =
-        dao.countBatchesWithPendingItems(libraryRootUrl, ImportQueueItemState.PENDING.name)
-
     /**
-     * @return count of finished items to total count of items in the batch.
+     * @return count of finished items to total count of items of the library,
+     * cancelled ones excluded.
      */
-    fun getBatchProgress(batchId: Long): Pair<Int, Int> {
-        val counts = dao.getBatchStateCounts(batchId)
+    fun getProgress(libraryRootUrl: String): Pair<Int, Int> {
+        val counts = dao.getLibraryStateCounts(libraryRootUrl)
+            .associate { ImportQueueItemState.valueOf(it.state) to it.count }
+            .minus(ImportQueueItemState.CANCELLED)
         val finished = counts
-            .filter { ImportQueueItemState.valueOf(it.state).isFinal }
-            .sumOf(ImportQueueStateCount::count)
-        return finished to counts.sumOf(ImportQueueStateCount::count)
+            .filterKeys(ImportQueueItemState::isFinal)
+            .values
+            .sum()
+        return finished to counts.values.sum()
     }
 
     fun getAlbums(batch: ImportQueueBatchDbEntity): Set<DestinationAlbum> =
@@ -161,36 +161,60 @@ class ImportQueueRepository(
         notifyChanged()
     }
 
-    fun retryFailedItems(batchId: Long) {
-        dao.changeBatchStates(
-            batchId = batchId,
+    fun retryAllFailedItems() {
+        dao.changeStates(
             fromStates = listOf(ImportQueueItemState.FAILED.name),
             toState = ImportQueueItemState.PENDING.name,
         )
         notifyChanged()
     }
 
-    fun cancelPendingItems(batchId: Long) {
-        dao.changeBatchStates(
-            batchId = batchId,
-            fromStates = listOf(ImportQueueItemState.PENDING.name),
-            toState = ImportQueueItemState.CANCELLED.name,
+    fun retryItem(itemId: Long) {
+        dao.changeItemState(
+            itemId = itemId,
+            fromStates = listOf(ImportQueueItemState.FAILED.name),
+            toState = ImportQueueItemState.PENDING.name,
         )
         notifyChanged()
     }
 
-    fun removeBatch(batchId: Long) {
+    /**
+     * Removes the item unless it is being uploaded right now.
+     */
+    fun removeItem(itemId: Long) {
         database.runInTransaction {
-            dao.deleteBatchItems(batchId)
-            dao.deleteBatch(batchId)
+            dao.deleteItemInStates(itemId, REMOVABLE_STATES)
+            dao.deleteEmptyBatches()
         }
         notifyChanged()
     }
 
-    fun removeFinishedBatches() {
-        getBatches()
-            .filter(ImportQueueBatch::isFinished)
-            .forEach { removeBatch(it.id) }
+    /**
+     * Removes all the items waiting to be uploaded.
+     */
+    fun removePendingItems() =
+        removeItemsInStates(ImportQueueItemState.PENDING)
+
+    /**
+     * Removes the items which are successfully done or cancelled,
+     * keeping the failed ones.
+     */
+    fun removeDoneItems() =
+        removeItemsInStates(
+            ImportQueueItemState.IMPORTED,
+            ImportQueueItemState.ALREADY_IN_LIBRARY,
+            ImportQueueItemState.CANCELLED,
+        )
+
+    fun removeFailedItems() =
+        removeItemsInStates(ImportQueueItemState.FAILED)
+
+    private fun removeItemsInStates(vararg states: ImportQueueItemState) {
+        database.runInTransaction {
+            dao.deleteItemsInStates(states.map(ImportQueueItemState::name))
+            dao.deleteEmptyBatches()
+        }
+        notifyChanged()
     }
 
     private fun readAlbums(albumsJson: String): Set<DestinationAlbum> =
@@ -198,4 +222,10 @@ class ImportQueueRepository(
             .readerForListOf(DestinationAlbum::class.java)
             .readValue<Collection<DestinationAlbum>>(albumsJson)
             .toSet()
+
+    private companion object {
+        private val REMOVABLE_STATES = ImportQueueItemState.values()
+            .filterNot { it == ImportQueueItemState.UPLOADING || it == ImportQueueItemState.UPLOADED }
+            .map(ImportQueueItemState::name)
+    }
 }

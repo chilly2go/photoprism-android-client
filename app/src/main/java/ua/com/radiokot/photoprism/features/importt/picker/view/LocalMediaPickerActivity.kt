@@ -1,11 +1,14 @@
 package ua.com.radiokot.photoprism.features.importt.picker.view
 
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
@@ -14,9 +17,11 @@ import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.chip.Chip
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.color.MaterialColors
 import com.squareup.picasso.Picasso
 import org.koin.android.ext.android.inject
@@ -25,6 +30,10 @@ import ua.com.radiokot.photoprism.R
 import ua.com.radiokot.photoprism.base.view.BaseActivity
 import ua.com.radiokot.photoprism.databinding.ActivityLocalMediaPickerBinding
 import ua.com.radiokot.photoprism.databinding.ListItemLocalMediaBinding
+import ua.com.radiokot.photoprism.databinding.ListItemLocalMediaFolderBinding
+import ua.com.radiokot.photoprism.databinding.ListItemLocalMediaFolderHeaderBinding
+import ua.com.radiokot.photoprism.databinding.ListItemLocalMediaFolderMoreBinding
+import ua.com.radiokot.photoprism.databinding.SheetLocalMediaFoldersBinding
 import ua.com.radiokot.photoprism.extension.autoDispose
 import ua.com.radiokot.photoprism.extension.barsAndCutout
 import ua.com.radiokot.photoprism.extension.barsAndCutoutPadding
@@ -32,6 +41,7 @@ import ua.com.radiokot.photoprism.features.importt.picker.view.model.LocalMediaP
 import ua.com.radiokot.photoprism.features.importt.picker.view.model.LocalMediaPickerViewModel.Item
 import ua.com.radiokot.photoprism.features.importt.picker.view.model.LocalMediaPickerViewModel.Status
 import ua.com.radiokot.photoprism.features.importt.view.ImportActivity
+import java.text.NumberFormat
 
 /**
  * Shows local photos and videos to pick for upload,
@@ -44,6 +54,7 @@ class LocalMediaPickerActivity : BaseActivity() {
     private val picasso: Picasso by inject()
     private val adapter = MediaAdapter()
     private var thumbnailSizePx = 0
+    private val numberFormat = NumberFormat.getIntegerInstance()
 
     private val permissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -66,6 +77,10 @@ class LocalMediaPickerActivity : BaseActivity() {
 
         setSupportActionBar(view.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.setDisplayShowTitleEnabled(false)
+        view.folderSelectorLayout.setOnClickListener {
+            showFoldersSheet()
+        }
         view.toolbar.barsAndCutoutPadding()
         applyBottomInsets()
 
@@ -77,9 +92,6 @@ class LocalMediaPickerActivity : BaseActivity() {
         view.mediaRecyclerView.adapter = adapter
         view.mediaRecyclerView.setHasFixedSize(true)
 
-        view.hideInLibrarySwitch.setOnCheckedChangeListener { _, isChecked ->
-            viewModel.onHideInLibraryChanged(isChecked)
-        }
         view.continueButton.setOnClickListener {
             viewModel.onContinueClicked()
         }
@@ -123,33 +135,14 @@ class LocalMediaPickerActivity : BaseActivity() {
             updateEmptyState()
         }
 
-        viewModel.buckets.observe(this) { buckets ->
-            val chipGroup = view.bucketsChipGroup
-            chipGroup.setOnCheckedStateChangeListener(null)
-            chipGroup.removeAllViews()
-            chipGroup.addView(createChip(getString(R.string.local_media_picker_all_folders), null))
-            buckets.forEach { bucket ->
-                chipGroup.addView(
-                    createChip(
-                        getString(
-                            R.string.template_local_media_picker_bucket,
-                            if (bucket.isOnSdCard)
-                                getString(R.string.template_local_media_picker_sd_card_bucket, bucket.name)
-                            else
-                                bucket.name,
-                            bucket.count
-                        ),
-                        bucket.id,
-                    )
-                )
-            }
-            chipGroup.check(chipGroup.getChildAt(0).id)
-            chipGroup.setOnCheckedStateChangeListener { group, checkedIds ->
-                val bucketId = checkedIds.firstOrNull()
-                    ?.let { group.findViewById<Chip>(it).tag as String? }
-                viewModel.onBucketSelected(bucketId)
-                view.mediaRecyclerView.scrollToPosition(0)
-            }
+        viewModel.selectedBucket.observe(this) { bucket ->
+            view.folderNameTextView.text = bucket?.name
+                ?: getString(R.string.local_media_picker_all_media)
+            view.folderLocationTextView.text =
+                if (bucket != null)
+                    getFolderLocation(bucket, withStorage = true)
+                else
+                    getString(R.string.local_media_picker_all_folders_location)
         }
 
         viewModel.checkProgress.observe(this) { progress ->
@@ -166,10 +159,17 @@ class LocalMediaPickerActivity : BaseActivity() {
                     getString(R.string.local_media_picker_library_unavailable)
 
                 !progress.isDone ->
-                    getString(R.string.template_local_media_picker_checking, progress.checked, progress.total)
+                    getString(
+                        R.string.template_local_media_picker_checking,
+                        numberFormat.format(progress.checked),
+                        numberFormat.format(progress.total),
+                    )
+
+                viewModel.isHidingInLibrary.value == true ->
+                    getString(R.string.template_local_media_picker_hidden, numberFormat.format(progress.inLibrary))
 
                 else ->
-                    getString(R.string.template_local_media_picker_checked, progress.inLibrary, progress.total)
+                    getString(R.string.template_local_media_picker_marked, numberFormat.format(progress.inLibrary))
             }
             updateEmptyState()
         }
@@ -177,11 +177,6 @@ class LocalMediaPickerActivity : BaseActivity() {
         viewModel.selectedCount.observe(this) { count ->
             view.continueButton.isVisible = count > 0
             view.continueButton.text = getString(R.string.template_local_media_picker_continue, count)
-            supportActionBar?.subtitle =
-                if (count > 0)
-                    getString(R.string.template_local_media_picker_selected, count)
-                else
-                    null
         }
 
         viewModel.isPermissionMissing.observe(this) {
@@ -189,16 +184,206 @@ class LocalMediaPickerActivity : BaseActivity() {
         }
     }
 
-    private fun createChip(text: String, bucketId: String?) =
-        (layoutInflater.inflate(
-            R.layout.chip_local_media_bucket,
-            view.bucketsChipGroup,
-            false
-        ) as Chip).apply {
-            id = ViewGroup.generateViewId()
-            this.text = text
-            tag = bucketId
+    /**
+     * @return where the folder is, like "SD card · DCIM › Camera".
+     */
+    private fun getFolderLocation(bucket: LocalMediaPickerViewModel.Bucket, withStorage: Boolean): String {
+        // Only the last folders are meaningful for long paths.
+        val path = bucket.path
+            ?.split('/')
+            ?.let { segments ->
+                if (segments.size > MAX_PATH_SEGMENTS)
+                    listOf("…") + segments.takeLast(MAX_PATH_SEGMENTS)
+                else
+                    segments
+            }
+            ?.joinToString(" › ")
+        val storage = getString(
+            if (bucket.isOnSdCard)
+                R.string.local_media_picker_sd_card_short
+            else
+                R.string.local_media_picker_device_short
+        )
+        return when {
+            withStorage && path != null -> "$storage · $path"
+            withStorage -> storage
+            else -> path.orEmpty()
         }
+    }
+
+    private fun showFoldersSheet() {
+        val buckets = viewModel.buckets.value.orEmpty()
+        val selectedBucketId = viewModel.selectedBucket.value?.id
+        val dialog = BottomSheetDialog(this)
+        val sheetView = SheetLocalMediaFoldersBinding.inflate(layoutInflater)
+
+        val rows = mutableListOf<FolderRow>()
+        rows += FolderRow.Folder(bucket = null, isSelected = selectedBucketId == null)
+        listOf(false, true).forEach { isOnSdCard ->
+            val storageBuckets = buckets.filter { it.isOnSdCard == isOnSdCard }
+            if (storageBuckets.isEmpty()) {
+                return@forEach
+            }
+            rows += FolderRow.Header(isOnSdCard)
+
+            // Small folders are collapsed not to bury the big ones,
+            // they are sorted by size.
+            val (shown, collapsed) = storageBuckets
+                .withIndex()
+                .partition { (index, bucket) ->
+                    index < ALWAYS_SHOWN_FOLDERS
+                            || bucket.count >= SMALL_FOLDER_SIZE
+                            || bucket.id == selectedBucketId
+                }
+            shown.forEach { (_, bucket) ->
+                rows += FolderRow.Folder(bucket, isSelected = bucket.id == selectedBucketId)
+            }
+            if (collapsed.isNotEmpty()) {
+                rows += FolderRow.ShowMore(
+                    folders = collapsed.map { (_, bucket) -> FolderRow.Folder(bucket, isSelected = false) },
+                )
+            }
+        }
+
+        sheetView.foldersRecyclerView.layoutManager = LinearLayoutManager(this)
+        sheetView.foldersRecyclerView.adapter = FoldersAdapter(rows) { bucket ->
+            dialog.dismiss()
+            viewModel.onBucketSelected(bucket?.id)
+            view.mediaRecyclerView.scrollToPosition(0)
+        }
+
+        dialog.setContentView(sheetView.root)
+        dialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+        dialog.behavior.skipCollapsed = true
+        dialog.show()
+    }
+
+    private sealed interface FolderRow {
+        class Header(val isOnSdCard: Boolean) : FolderRow
+        class Folder(
+            val bucket: LocalMediaPickerViewModel.Bucket?,
+            val isSelected: Boolean,
+        ) : FolderRow
+
+        class ShowMore(val folders: List<Folder>) : FolderRow
+    }
+
+    private inner class FoldersAdapter(
+        rows: List<FolderRow>,
+        private val onFolderClicked: (LocalMediaPickerViewModel.Bucket?) -> Unit,
+    ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        private val coverSizePx = (56 * resources.displayMetrics.density).toInt()
+        private val rows = rows.toMutableList()
+
+        override fun getItemCount() = rows.size
+
+        override fun getItemViewType(position: Int) = when (rows[position]) {
+            is FolderRow.Header -> 0
+            is FolderRow.Folder -> 1
+            is FolderRow.ShowMore -> 2
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            val inflater = LayoutInflater.from(parent.context)
+            val itemView = when (viewType) {
+                0 -> ListItemLocalMediaFolderHeaderBinding.inflate(inflater, parent, false).root
+                1 -> ListItemLocalMediaFolderBinding.inflate(inflater, parent, false).root
+                else -> ListItemLocalMediaFolderMoreBinding.inflate(inflater, parent, false).root
+            }
+            return object : RecyclerView.ViewHolder(itemView) {}
+        }
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            when (val row = rows[position]) {
+                is FolderRow.ShowMore -> with(ListItemLocalMediaFolderMoreBinding.bind(holder.itemView)) {
+                    textView.text = resources.getQuantityString(
+                        R.plurals.local_media_picker_show_more_folders,
+                        row.folders.size,
+                        row.folders.size,
+                    )
+                    root.setOnClickListener {
+                        val index = rows.indexOf(row)
+                        rows.removeAt(index)
+                        rows.addAll(index, row.folders)
+                        notifyItemRemoved(index)
+                        notifyItemRangeInserted(index, row.folders.size)
+                    }
+                }
+
+                is FolderRow.Header -> with(ListItemLocalMediaFolderHeaderBinding.bind(holder.itemView)) {
+                    iconImageView.setImageResource(
+                        if (row.isOnSdCard) R.drawable.ic_sd_card else R.drawable.ic_smartphone
+                    )
+                    titleTextView.setText(
+                        if (row.isOnSdCard)
+                            R.string.local_media_picker_on_sd_card
+                        else
+                            R.string.local_media_picker_on_device
+                    )
+                }
+
+                is FolderRow.Folder -> with(ListItemLocalMediaFolderBinding.bind(holder.itemView)) {
+                    val bucket = row.bucket
+                    if (bucket != null) {
+                        picasso
+                            .load(bucket.coverUri)
+                            .resize(coverSizePx, coverSizePx)
+                            .centerCrop()
+                            .placeholder(R.drawable.image_placeholder)
+                            .error(R.drawable.image_error)
+                            .into(coverImageView)
+                        coverImageView.scaleType = ImageView.ScaleType.CENTER_CROP
+                        coverImageView.imageTintList = null
+                    } else {
+                        picasso.cancelRequest(coverImageView)
+                        coverImageView.setImageResource(R.drawable.ic_photo_library)
+                        coverImageView.scaleType = ImageView.ScaleType.CENTER_INSIDE
+                        coverImageView.imageTintList = ColorStateList.valueOf(
+                            MaterialColors.getColor(
+                                coverImageView,
+                                com.google.android.material.R.attr.colorPrimary,
+                            )
+                        )
+                    }
+
+                    nameTextView.text = bucket?.name
+                        ?: getString(R.string.local_media_picker_all_media)
+                    val location = bucket?.let { getFolderLocation(it, withStorage = false) }
+                    pathTextView.isVisible = !location.isNullOrEmpty() && location != bucket?.name
+                    pathTextView.text = location
+
+                    val count = bucket?.count ?: viewModel.buckets.value.orEmpty().sumOf { it.count }
+                    val missingCount = bucket?.missingCount
+                    countsTextView.text = when {
+                        missingCount == null ->
+                            numberFormat.format(count)
+
+                        missingCount == count ->
+                            getString(
+                                R.string.template_local_media_picker_folder_nothing_uploaded,
+                                numberFormat.format(count),
+                            )
+
+                        missingCount == 0 ->
+                            getString(
+                                R.string.template_local_media_picker_folder_all_uploaded,
+                                numberFormat.format(count),
+                            )
+
+                        else ->
+                            getString(
+                                R.string.template_local_media_picker_folder_missing,
+                                numberFormat.format(count),
+                                numberFormat.format(missingCount),
+                            )
+                    }
+
+                    selectedImageView.visibility = if (row.isSelected) View.VISIBLE else View.INVISIBLE
+                    root.setOnClickListener { onFolderClicked(bucket) }
+                }
+            }
+        }
+    }
 
     private fun updateEmptyState() {
         val isPermissionMissing = viewModel.isPermissionMissing.value == true
@@ -250,6 +435,11 @@ class LocalMediaPickerActivity : BaseActivity() {
         return super.onCreateOptionsMenu(menu)
     }
 
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        menu.findItem(R.id.show_in_library)?.isChecked = viewModel.isHidingInLibrary.value != true
+        return super.onPrepareOptionsMenu(menu)
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.select_all ->
@@ -257,6 +447,9 @@ class LocalMediaPickerActivity : BaseActivity() {
 
             R.id.clear_selection ->
                 viewModel.onClearSelectionClicked()
+
+            R.id.show_in_library ->
+                viewModel.onHideInLibraryChanged(item.isChecked)
 
             R.id.system_picker ->
                 openSystemPicker()
@@ -328,6 +521,9 @@ class LocalMediaPickerActivity : BaseActivity() {
     }
 
     private companion object {
+        private const val ALWAYS_SHOWN_FOLDERS = 6
+        private const val SMALL_FOLDER_SIZE = 20
+        private const val MAX_PATH_SEGMENTS = 3
         private const val MIN_THUMBNAIL_SIZE_DP = 80
         private const val SELECTED_SCALE = 0.85f
     }
