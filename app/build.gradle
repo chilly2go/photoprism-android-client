@@ -32,6 +32,14 @@ android {
         versionCode 73
         versionName "1.47.1"
 
+        // Own builds of the fork set their version from the release tag.
+        if (project.hasProperty("ownVersionCode")) {
+            versionCode project.property("ownVersionCode") as Integer
+        }
+        if (project.hasProperty("ownVersionName")) {
+            versionName project.property("ownVersionName")
+        }
+
         // Must be aligned with @xml/locale_config and values-*.
         resConfigs "en", "cs", "de", "el", "es", "fr", "it", "pl", "ru", "tr", "uk",
                 "b+zh+Hans", "b+zh+Hant"
@@ -47,10 +55,12 @@ android {
 
     signingConfigs {
         ci {
+            // Own builds of the fork pass the password of their keystore.
+            def ciSigningPassword = System.getenv("SIGNING_KEYSTORE_PASSWORD") ?: "ci"
             storeFile ciSigningKeystoreFile
-            storePassword "ci"
+            storePassword ciSigningPassword
             keyAlias "ci"
-            keyPassword "ci"
+            keyPassword ciSigningPassword
         }
     }
 
@@ -87,7 +97,9 @@ android {
             initWith release
 
             applicationIdSuffix ".clone"
-            versionNameSuffix "+clone"
+            // Own builds take the version from the tag as is,
+            // so Obtainium can match it with the release.
+            versionNameSuffix project.hasProperty("ownVersionName") ? "" : "+clone"
 
             manifestPlaceholders.fileProviderAuthority = fileProviderAuthority + ".clone"
             buildConfigField 'String', 'FILE_PROVIDER_AUTHORITY', "\"" + fileProviderAuthority + ".clone" + "\""
