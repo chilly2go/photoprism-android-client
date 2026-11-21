@@ -12,6 +12,7 @@ import ua.com.radiokot.photoprism.features.importt.picker.data.model.LocalMedia
 import ua.com.radiokot.photoprism.features.importt.picker.logic.LibraryHashChecker
 import ua.com.radiokot.photoprism.features.importt.picker.logic.LocalMediaHasher
 import ua.com.radiokot.photoprism.features.importt.picker.logic.LocalMediaReader
+import java.util.Calendar
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
@@ -44,8 +45,15 @@ class LocalMediaPickerViewModel(
     private var isCleared = false
     private var isLoaded = false
 
-    private val _items = MutableLiveData<List<Item>>(emptyList())
-    val items: LiveData<List<Item>> = _items
+    private val _items = MutableLiveData<List<ListItem>>(emptyList())
+
+    /**
+     * Media of the selected folder grouped by the day taken, from the newest.
+     */
+    val items: LiveData<List<ListItem>> = _items
+    private var visibleMediaIds: List<Long> = emptyList()
+    private var dragSelectionBase: Set<Long>? = null
+    private var dragSelectionSelects = true
     private val _buckets = MutableLiveData<List<Bucket>>(emptyList())
     val buckets: LiveData<List<Bucket>> = _buckets
     private val _selectedBucket = MutableLiveData<Bucket?>(null)
@@ -281,7 +289,7 @@ class LocalMediaPickerViewModel(
     }
 
     private fun postState() {
-        val items: List<Item>
+        val items: List<ListItem>
         val progress: CheckProgress
         val selectedCount: Int
         val buckets: List<Bucket>
@@ -289,7 +297,7 @@ class LocalMediaPickerViewModel(
         synchronized(lock) {
             buckets = getBuckets()
             // Keep the selection only for media which can be seen.
-            items = allMedia
+            val mediaItems = allMedia
                 .asSequence()
                 .filter { selectedBucketId == null || it.bucketId == selectedBucketId }
                 .mapNotNull { media ->
@@ -306,6 +314,8 @@ class LocalMediaPickerViewModel(
                     }
                 }
                 .toList()
+            visibleMediaIds = mediaItems.map { it.media.id }
+            items = groupByDay(mediaItems)
 
             val scope = allMedia.filter { selectedBucketId == null || it.bucketId == selectedBucketId }
             progress = CheckProgress(
@@ -322,6 +332,46 @@ class LocalMediaPickerViewModel(
         _items.postValue(items)
         _checkProgress.postValue(progress)
         _selectedCount.postValue(selectedCount)
+    }
+
+    /**
+     * The media is sorted from the newest, so each day comes in one piece.
+     */
+    private fun groupByDay(mediaItems: List<Item>): List<ListItem> {
+        val result = ArrayList<ListItem>(mediaItems.size + mediaItems.size / 4)
+        val calendar = Calendar.getInstance()
+        var dayItems = mutableListOf<Item>()
+        var dayStartMs: Long? = null
+
+        fun addDay() {
+            val start = dayStartMs
+                ?: return
+            result += ListItem.Day(
+                dayStartMs = start,
+                mediaIds = dayItems.map { it.media.id },
+                selectedCount = dayItems.count(Item::isSelected),
+            )
+            dayItems.mapTo(result) { ListItem.Media(it) }
+        }
+
+        mediaItems.forEach { item ->
+            calendar.timeInMillis = item.media.dateTakenMs
+            calendar.set(Calendar.HOUR_OF_DAY, 0)
+            calendar.set(Calendar.MINUTE, 0)
+            calendar.set(Calendar.SECOND, 0)
+            calendar.set(Calendar.MILLISECOND, 0)
+            val itemDayStartMs = calendar.timeInMillis
+
+            if (itemDayStartMs != dayStartMs) {
+                addDay()
+                dayStartMs = itemDayStartMs
+                dayItems = mutableListOf()
+            }
+            dayItems += item
+        }
+        addDay()
+
+        return result
     }
 
     fun onBucketSelected(bucketId: String?) {
@@ -353,9 +403,59 @@ class LocalMediaPickerViewModel(
 
     fun onSelectAllClicked() {
         synchronized(lock) {
-            _items.value?.mapTo(selectedIds) { it.media.id }
+            selectedIds += visibleMediaIds
         }
         postState()
+    }
+
+    /**
+     * Selects the whole day, or unselects it if it is all selected.
+     */
+    fun onDayClicked(day: ListItem.Day) {
+        synchronized(lock) {
+            if (day.isAllSelected) {
+                selectedIds -= day.mediaIds.toSet()
+            } else {
+                selectedIds += day.mediaIds
+            }
+        }
+        postState()
+    }
+
+    /**
+     * Starts selecting by dragging from the media with the [mediaId]:
+     * from a selected one, the dragged over media is unselected, otherwise selected.
+     */
+    fun onDragSelectionStarted(mediaId: Long) {
+        synchronized(lock) {
+            dragSelectionBase = selectedIds.toSet()
+            dragSelectionSelects = mediaId !in selectedIds
+        }
+        onDragSelectionChanged(listOf(mediaId))
+    }
+
+    /**
+     * @param mediaIds the media dragged over so far, from the start to where the finger is.
+     */
+    fun onDragSelectionChanged(mediaIds: Collection<Long>) {
+        synchronized(lock) {
+            val base = dragSelectionBase
+                ?: return
+            selectedIds.clear()
+            selectedIds += base
+            if (dragSelectionSelects) {
+                selectedIds += mediaIds
+            } else {
+                selectedIds -= mediaIds.toSet()
+            }
+        }
+        postState()
+    }
+
+    fun onDragSelectionEnded() {
+        synchronized(lock) {
+            dragSelectionBase = null
+        }
     }
 
     fun onClearSelectionClicked() {
@@ -407,6 +507,24 @@ class LocalMediaPickerViewModel(
         val status: Status,
         val isSelected: Boolean,
     )
+
+    sealed interface ListItem {
+        data class Day(
+            /**
+             * Local midnight of the day.
+             */
+            val dayStartMs: Long,
+            val mediaIds: List<Long>,
+            val selectedCount: Int,
+        ) : ListItem {
+            val isAllSelected: Boolean
+                get() = selectedCount == mediaIds.size
+        }
+
+        data class Media(
+            val item: Item,
+        ) : ListItem
+    }
 
     data class Bucket(
         val id: String,
