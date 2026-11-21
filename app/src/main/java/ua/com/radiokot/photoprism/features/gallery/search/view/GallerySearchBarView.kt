@@ -1,5 +1,6 @@
 package ua.com.radiokot.photoprism.features.gallery.search.view
 
+import ua.com.radiokot.photoprism.env.data.storage.SessionCapabilitiesRepository
 import android.annotation.SuppressLint
 import android.text.TextUtils
 import android.view.KeyEvent
@@ -184,6 +185,7 @@ class GallerySearchBarView(
         menuItems[R.id.importt]!!.isVisible =
             state is GallerySearchViewModel.State.NoSearch
                     && !tvDetector.isRunningOnTv
+                    && scope.getOrNull<SessionCapabilitiesRepository>()?.current?.canUpload != false
 
         log.debug {
             "subscribeToState(): handled_new_state:" +

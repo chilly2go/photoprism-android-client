@@ -1,5 +1,8 @@
 package ua.com.radiokot.photoprism.features.gallery.view
 
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import ua.com.radiokot.photoprism.env.data.storage.SessionCapabilitiesRepository
+import ua.com.radiokot.photoprism.env.data.model.SessionCapabilities
 import android.Manifest
 import android.content.Intent
 import android.os.Build
@@ -87,6 +90,9 @@ class GallerySingleRepositoryActivity : BaseActivity() {
         this::onAddingDestinationAlbumSelectionResult,
     )
     private val fileReturnIntentCreator: FileReturnIntentCreator by inject()
+    private val sessionCapabilitiesRepository: SessionCapabilitiesRepository? by lazy {
+        scope.getOrNull()
+    }
     private val downloadProgressView: DownloadProgressView by lazy {
         DownloadProgressView(
             viewModel = viewModel,
@@ -270,6 +276,10 @@ class GallerySingleRepositoryActivity : BaseActivity() {
             updateMultipleSelectionMenuVisibility()
         }
 
+        sessionCapabilitiesRepository?.capabilities?.observeOn(AndroidSchedulers.mainThread())?.subscribe(this) {
+            updateMultipleSelectionMenuVisibility()
+        }
+
         viewModel.state.subscribeBy { state ->
             // The FAB is only used when selecting for other app,
             // as selecting for user allows more than 1 action.
@@ -288,6 +298,8 @@ class GallerySingleRepositoryActivity : BaseActivity() {
     }
 
     private fun updateMultipleSelectionMenuVisibility() {
+        val capabilities = sessionCapabilitiesRepository?.current
+            ?: SessionCapabilities.ASSUMED
         val multipleSelectionItemsCount = viewModel.selectedItemsCount.value ?: 0
         val state = viewModel.currentState
         val areUserSelectionItemsVisible =
@@ -297,12 +309,21 @@ class GallerySingleRepositoryActivity : BaseActivity() {
             forEach { menuItem ->
                 menuItem.isVisible = areUserSelectionItemsVisible
             }
+            findItem(R.id.add_to_album).isVisible =
+                areUserSelectionItemsVisible && capabilities.canUpdateAlbums
+            findItem(R.id.archive).isVisible =
+                areUserSelectionItemsVisible && capabilities.canArchive
+            findItem(R.id.delete).isVisible =
+                areUserSelectionItemsVisible && capabilities.canDelete
             findItem(R.id.add_to_favorites).isVisible =
                 areUserSelectionItemsVisible && viewModel.canAddSelectedToFavorites
+                        && capabilities.canSetFavorite
             findItem(R.id.remove_from_favorites).isVisible =
                 areUserSelectionItemsVisible && viewModel.canRemoveSelectedFromFavorites
+                        && capabilities.canSetFavorite
             findItem(R.id.remove_from_album).isVisible =
                 areUserSelectionItemsVisible && state.canRemoveFromAlbum
+                        && capabilities.canUpdateAlbums
         }
     }
 
