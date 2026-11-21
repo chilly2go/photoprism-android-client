@@ -346,10 +346,13 @@ class LocalMediaPickerViewModel(
         fun addDay() {
             val start = dayStartMs
                 ?: return
+            val selectableItems = dayItems.filter(Item::isSelectableInBulk)
             result += ListItem.Day(
                 dayStartMs = start,
                 mediaIds = dayItems.map { it.media.id },
+                selectableIds = selectableItems.map { it.media.id },
                 selectedCount = dayItems.count(Item::isSelected),
+                selectableSelectedCount = selectableItems.count(Item::isSelected),
             )
             dayItems.mapTo(result) { ListItem.Media(it) }
         }
@@ -403,7 +406,7 @@ class LocalMediaPickerViewModel(
 
     fun onSelectAllClicked() {
         synchronized(lock) {
-            selectedIds += visibleMediaIds
+            selectedIds += visibleMediaIds.filterSelectableInBulk()
         }
         postState()
     }
@@ -416,7 +419,7 @@ class LocalMediaPickerViewModel(
             if (day.isAllSelected) {
                 selectedIds -= day.mediaIds.toSet()
             } else {
-                selectedIds += day.mediaIds
+                selectedIds += day.selectableIds
             }
         }
         postState()
@@ -444,7 +447,7 @@ class LocalMediaPickerViewModel(
             selectedIds.clear()
             selectedIds += base
             if (dragSelectionSelects) {
-                selectedIds += mediaIds
+                selectedIds += mediaIds.filterSelectableInBulk()
             } else {
                 selectedIds -= mediaIds.toSet()
             }
@@ -502,11 +505,25 @@ class LocalMediaPickerViewModel(
         MISSING,
     }
 
+    /**
+     * Selecting many at once skips media which is already in the library,
+     * so it is only uploaded again when picked one by one.
+     * Must be called under the [lock].
+     */
+    private fun Collection<Long>.filterSelectableInBulk(): List<Long> =
+        filter { statusById[it] != Status.IN_LIBRARY }
+
     data class Item(
         val media: LocalMedia,
         val status: Status,
         val isSelected: Boolean,
-    )
+    ) {
+        /**
+         * @see filterSelectableInBulk
+         */
+        val isSelectableInBulk: Boolean
+            get() = status != Status.IN_LIBRARY
+    }
 
     sealed interface ListItem {
         data class Day(
@@ -515,10 +532,20 @@ class LocalMediaPickerViewModel(
              */
             val dayStartMs: Long,
             val mediaIds: List<Long>,
+            /**
+             * The media of the day which selecting the day selects,
+             * without the media already in the library.
+             */
+            val selectableIds: List<Long>,
             val selectedCount: Int,
+            val selectableSelectedCount: Int,
         ) : ListItem {
+            /**
+             * Whether selecting the day has nothing more to select,
+             * so tapping it unselects the whole day.
+             */
             val isAllSelected: Boolean
-                get() = selectedCount == mediaIds.size
+                get() = selectedCount > 0 && selectableSelectedCount == selectableIds.size
         }
 
         data class Media(

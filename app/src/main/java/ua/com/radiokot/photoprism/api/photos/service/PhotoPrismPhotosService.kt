@@ -37,6 +37,17 @@ interface PhotoPrismPhotosService {
         hash: String? = null,
         @Query("archived")
         archived: Boolean? = null,
+        /**
+         * Hidden photos: those which couldn't be indexed.
+         * Unlike the rest, their files with errors are returned too.
+         */
+        @Query("hidden")
+        hidden: Boolean? = null,
+        /**
+         * Only the files which have errors, otherwise excluded.
+         */
+        @Query("error")
+        error: Boolean? = null,
     ): List<PhotoPrismMergedPhoto>
 
     @kotlin.jvm.Throws(IOException::class)
