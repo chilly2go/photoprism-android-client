@@ -232,6 +232,7 @@
     <string name="import_queue_resume">Resume</string>
     <string name="import_queue_empty">Nothing to upload</string>
     <string name="import_queue_status_uploading">Uploading…</string>
+    <string name="import_queue_status_importing">Adding to the library…</string>
     <string name="import_queue_status_waiting_for_connection">Waiting for a connection</string>
     <string name="import_queue_status_paused">Paused</string>
     <string name="import_queue_status_done">All done</string>

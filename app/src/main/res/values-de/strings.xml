@@ -228,6 +228,7 @@
     <string name="import_queue_resume">Fortsetzen</string>
     <string name="import_queue_empty">Nichts zum Hochladen</string>
     <string name="import_queue_status_uploading">Wird hochgeladen …</string>
+    <string name="import_queue_status_importing">Wird in die Bibliothek übernommen …</string>
     <string name="import_queue_status_waiting_for_connection">Wartet auf Verbindung</string>
     <string name="import_queue_status_paused">Pausiert</string>
     <string name="import_queue_status_done">Alles erledigt</string>

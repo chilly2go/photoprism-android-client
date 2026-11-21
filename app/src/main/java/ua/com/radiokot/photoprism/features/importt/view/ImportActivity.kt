@@ -29,6 +29,7 @@ import ua.com.radiokot.photoprism.extension.setThrottleOnClickListener
 import ua.com.radiokot.photoprism.features.albums.view.DestinationAlbumSelectionActivity
 import ua.com.radiokot.photoprism.features.importt.logic.ParseImportIntentUseCase
 import ua.com.radiokot.photoprism.features.importt.model.ImportableFile
+import ua.com.radiokot.photoprism.features.importt.queue.view.ImportQueueActivity
 import ua.com.radiokot.photoprism.features.importt.view.model.ImportViewModel
 
 class ImportActivity : BaseActivity() {
@@ -113,6 +114,15 @@ class ImportActivity : BaseActivity() {
         when (event) {
             ImportViewModel.Event.Finish ->
                 finish()
+
+            ImportViewModel.Event.FinishAddedToQueue -> {
+                // Files picked within the app are followed to the queue,
+                // while sharing from other apps returns there.
+                if (intent.getBooleanExtra(EXTRA_OPEN_QUEUE_AFTER, false)) {
+                    startActivity(Intent(this, ImportQueueActivity::class.java))
+                }
+                finish()
+            }
 
             ImportViewModel.Event.ShowStartedInBackgroundMessage ->
                 Toast.makeText(this, R.string.import_started_in_background, Toast.LENGTH_SHORT)
@@ -212,12 +222,15 @@ class ImportActivity : BaseActivity() {
     }
 
     companion object {
+        private const val EXTRA_OPEN_QUEUE_AFTER = "open_queue_after"
+
         fun getIntent(
             context: Context,
             uris: List<@JvmSuppressWildcards Uri>,
         ): Intent =
             Intent(context, ImportActivity::class.java)
                 .setAction(Intent.ACTION_SEND_MULTIPLE)
+                .putExtra(EXTRA_OPEN_QUEUE_AFTER, true)
                 // Passing the URIs through a file, as the intent extras
                 // can't hold thousands of them (TransactionTooLargeException).
                 .putExtra(
@@ -234,6 +247,7 @@ class ImportActivity : BaseActivity() {
         ): Intent =
             Intent(context, ImportActivity::class.java)
                 .setAction(Intent.ACTION_SEND_MULTIPLE)
+                .putExtra(EXTRA_OPEN_QUEUE_AFTER, true)
                 .putExtra(
                     ParseImportIntentUseCase.EXTRA_URI_LIST_FILE_PATH,
                     ParseImportIntentUseCase.writeFileListFile(

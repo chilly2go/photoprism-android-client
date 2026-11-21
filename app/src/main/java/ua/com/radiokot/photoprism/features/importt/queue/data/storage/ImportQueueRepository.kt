@@ -147,6 +147,23 @@ class ImportQueueRepository(
     }
 
     /**
+     * Marks the item as being uploaded, unless it has been removed or changed meanwhile.
+     *
+     * @return true if the item is to be uploaded
+     */
+    fun startItem(itemId: Long): Boolean {
+        val isStarted = dao.changeItemState(
+            itemId = itemId,
+            fromStates = listOf(ImportQueueItemState.PENDING.name),
+            toState = ImportQueueItemState.UPLOADING.name,
+        ) > 0
+        if (isStarted) {
+            notifyChanged()
+        }
+        return isStarted
+    }
+
+    /**
      * Returns the items which were interrupted while being processed
      * back to the queue, as their upload must be repeated.
      */

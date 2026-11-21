@@ -13,6 +13,7 @@ import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import org.koin.core.component.KoinComponent
+import org.koin.core.component.get
 import org.koin.core.component.inject
 import org.koin.core.scope.Scope
 import ua.com.radiokot.photoprism.di.DI_SCOPE_SESSION
@@ -63,6 +64,8 @@ class ImportQueueWorker(
             sessionService = sessionScope.get(),
             uploadService = sessionScope.get(),
             filesService = sessionScope.get(),
+            libraryHashesRepository = get(),
+            uploadProgress = get(),
             libraryRootUrl = sessionScope.get<EnvSession>().envConnectionParams.rootUrl.toString(),
             isStopped = ::isStopped,
             onProgress = { progress ->

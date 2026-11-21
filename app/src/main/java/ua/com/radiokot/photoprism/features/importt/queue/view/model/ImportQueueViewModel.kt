@@ -15,6 +15,7 @@ import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemState
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueOverview
 import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueRepository
+import ua.com.radiokot.photoprism.features.importt.queue.logic.ImportQueueUploadProgress
 import ua.com.radiokot.photoprism.features.importt.queue.logic.ImportQueueWorker
 import java.util.concurrent.TimeUnit
 
@@ -24,6 +25,7 @@ import java.util.concurrent.TimeUnit
  */
 class ImportQueueViewModel(
     private val repository: ImportQueueRepository,
+    uploadProgress: ImportQueueUploadProgress,
     application: Application,
 ) : AndroidViewModel(application) {
     private val log = kLogger("ImportQueueVM")
@@ -31,6 +33,7 @@ class ImportQueueViewModel(
 
     private val overview = MutableLiveData<ImportQueueOverview>()
     private val filter = MutableLiveData(Filter.ALL)
+    private val uploadPercents = MutableLiveData<Map<Long, Int>>(emptyMap())
 
     private val workState: LiveData<WorkState> =
         MediatorLiveData<WorkState>().apply {
@@ -63,9 +66,11 @@ class ImportQueueViewModel(
                     overview = overview,
                     workState = workState.value ?: WorkState.IDLE,
                     filter = filter.value!!,
+                    uploadPercents = uploadPercents.value!!,
                 )
             }
             addSource(overview) { update() }
+            addSource(uploadPercents) { update() }
             addSource(workState) { update() }
             addSource(filter) { update() }
         }
@@ -85,27 +90,39 @@ class ImportQueueViewModel(
                 }
             )
             .autoDispose(this)
+
+        uploadProgress.percentsByItemId
+            .throttleLatest(PROGRESS_UPDATE_INTERVAL_MS, TimeUnit.MILLISECONDS, true)
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe(uploadPercents::setValue)
+            .autoDispose(this)
     }
 
     private fun buildListItems(
         overview: ImportQueueOverview,
         workState: WorkState,
         filter: Filter,
+        uploadPercents: Map<Long, Int>,
     ): List<ListItem> {
         if (overview.items.isEmpty()) {
             return emptyList()
         }
 
         val waitingCount = overview.count(*Filter.PENDING.states)
-        val inProgressCount = overview.count(
-            ImportQueueItemState.UPLOADING,
-            ImportQueueItemState.UPLOADED,
-        )
+        val uploadingCount = overview.count(ImportQueueItemState.UPLOADING)
+        val uploadedCount = overview.count(ImportQueueItemState.UPLOADED)
+        val inProgressCount = uploadingCount + uploadedCount
         val failedCount = overview.count(ImportQueueItemState.FAILED)
         val hasWorkLeft = waitingCount > 0
         val totalCount = overview.items.size - overview.count(ImportQueueItemState.CANCELLED)
 
         val status = when {
+            // The uploaded files are being added to the library,
+            // nothing is being uploaded meanwhile.
+            hasWorkLeft && workState == WorkState.RUNNING
+                    && uploadingCount == 0 && uploadedCount > 0 ->
+                Status.IMPORTING
+
             hasWorkLeft && workState == WorkState.RUNNING ->
                 Status.UPLOADING
 
@@ -122,11 +139,27 @@ class ImportQueueViewModel(
                 Status.DONE
         }
 
+        // Uploading takes most of the time, adding to the library the rest.
+        val uploadingProgress = overview.items.sumOf { item ->
+            when (item.state) {
+                ImportQueueItemState.UPLOADING ->
+                    (uploadPercents[item.id] ?: 0).coerceAtLeast(0) * UPLOAD_SHARE / 100
+
+                ImportQueueItemState.UPLOADED ->
+                    UPLOAD_SHARE
+
+                else ->
+                    0
+            }
+        }
+
         val result = mutableListOf<ListItem>()
         result += ListItem.Summary(
             status = status,
             finishedCount = totalCount - waitingCount,
             totalCount = totalCount,
+            progress = (totalCount - waitingCount) * PROGRESS_PER_ITEM + uploadingProgress,
+            progressMax = totalCount * PROGRESS_PER_ITEM,
             failedCount = failedCount,
             canPause = hasWorkLeft && workState != WorkState.IDLE,
             canResume = hasWorkLeft && workState == WorkState.IDLE,
@@ -153,7 +186,14 @@ class ImportQueueViewModel(
                     if (filter == Filter.FAILED)
                         ListItem.Problem(item)
                     else
-                        ListItem.Media(item)
+                        ListItem.Media(
+                            item = item,
+                            uploadPercent =
+                                if (item.state == ImportQueueItemState.UPLOADING)
+                                    uploadPercents[item.id] ?: ImportQueueUploadProgress.UNKNOWN
+                                else
+                                    null,
+                        )
             }
         }
 
@@ -231,6 +271,7 @@ class ImportQueueViewModel(
 
     enum class Status {
         UPLOADING,
+        IMPORTING,
         WAITING_FOR_CONNECTION,
         PAUSED,
         DONE,
@@ -255,6 +296,8 @@ class ImportQueueViewModel(
             val status: Status,
             val finishedCount: Int,
             val totalCount: Int,
+            val progress: Int,
+            val progressMax: Int,
             val failedCount: Int,
             val canPause: Boolean,
             val canResume: Boolean,
@@ -270,6 +313,11 @@ class ImportQueueViewModel(
 
         data class Media(
             val item: ImportQueueOverview.Item,
+            /**
+             * Set while the file is being uploaded,
+             * [ImportQueueUploadProgress.UNKNOWN] while it is being checked.
+             */
+            val uploadPercent: Int?,
         ) : ListItem
 
         data class Problem(
@@ -277,5 +325,11 @@ class ImportQueueViewModel(
         ) : ListItem
 
         object NothingInFilter : ListItem
+    }
+
+    private companion object {
+        private const val PROGRESS_UPDATE_INTERVAL_MS = 300L
+        private const val PROGRESS_PER_ITEM = 100
+        private const val UPLOAD_SHARE = 90
     }
 }

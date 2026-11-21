@@ -214,7 +214,7 @@ class ImportViewModel(
                     "\nbatchId=$batchId"
         }
 
-        eventsSubject.onNext(Event.Finish)
+        eventsSubject.onNext(Event.FinishAddedToQueue)
     }.toCompletable().subscribeOn(Schedulers.io())
 
     data class Summary(
@@ -226,6 +226,11 @@ class ImportViewModel(
 
     sealed interface Event {
         object Finish : Event
+
+        /**
+         * Finish as the files have been added to the upload queue.
+         */
+        object FinishAddedToQueue : Event
         object ShowStartedInBackgroundMessage : Event
 
         /**

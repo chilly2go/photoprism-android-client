@@ -322,7 +322,7 @@ class ImportQueueActivity : BaseActivity() {
             when (val item = getItem(position)) {
                 is ListItem.Summary -> (holder as SummaryViewHolder).bind(item)
                 is ListItem.Section -> (holder as SectionViewHolder).bind(item)
-                is ListItem.Media -> (holder as MediaViewHolder).bind(item.item)
+                is ListItem.Media -> (holder as MediaViewHolder).bind(item)
                 is ListItem.Problem -> (holder as ProblemViewHolder).bind(item.item)
                 ListItem.NothingInFilter -> {}
             }
@@ -364,6 +364,10 @@ class ImportQueueActivity : BaseActivity() {
                     R.drawable.ic_upload to
                             context.getString(R.string.import_queue_status_uploading)
 
+                Status.IMPORTING ->
+                    R.drawable.ic_cloud_upload to
+                            context.getString(R.string.import_queue_status_importing)
+
                 Status.WAITING_FOR_CONNECTION ->
                     R.drawable.ic_schedule to
                             context.getString(R.string.import_queue_status_waiting_for_connection)
@@ -401,8 +405,8 @@ class ImportQueueActivity : BaseActivity() {
                 numberFormat.format(summary.finishedCount),
                 numberFormat.format(summary.totalCount),
             )
-            progressIndicator.max = summary.totalCount.coerceAtLeast(1)
-            progressIndicator.setProgressCompat(summary.finishedCount, true)
+            progressIndicator.max = summary.progressMax.coerceAtLeast(1)
+            progressIndicator.setProgressCompat(summary.progress, true)
 
             pauseResumeButton.isVisible = summary.canPause || summary.canResume
             if (summary.canPause) {
@@ -480,11 +484,14 @@ class ImportQueueActivity : BaseActivity() {
     ) : RecyclerView.ViewHolder(view.root) {
         private var boundItemId: Long? = null
 
-        fun bind(item: ImportQueueOverview.Item) = with(view) {
+        fun bind(media: ListItem.Media) = with(view) {
+            val item = media.item
             if (boundItemId != item.id) {
                 boundItemId = item.id
                 loadThumbnail(item, imageView)
             }
+
+            bindUploadProgress(media.uploadPercent)
 
             videoImageView.isVisible = item.isVideo
             // Files which are not in the library yet are faded,
@@ -508,19 +515,34 @@ class ImportQueueActivity : BaseActivity() {
             }
         }
 
-        private fun bindBadge(state: ImportQueueItemState) = with(view) {
-            val isInProgress = state == ImportQueueItemState.UPLOADING
-                    || state == ImportQueueItemState.UPLOADED
-            badgeProgressIndicator.isVisible = isInProgress
-            badgeImageView.isVisible = !isInProgress
+        private fun bindUploadProgress(percent: Int?) = with(view) {
+            uploadProgressIndicator.isVisible = percent != null
+            if (percent == null) {
+                return@with
+            }
 
+            val isKnown = percent >= 0
+            if (uploadProgressIndicator.isIndeterminate == isKnown) {
+                // Changing the mode of a shown indicator is not allowed.
+                uploadProgressIndicator.isVisible = false
+                uploadProgressIndicator.isIndeterminate = !isKnown
+                uploadProgressIndicator.isVisible = true
+            }
+            if (isKnown) {
+                uploadProgressIndicator.setProgressCompat(percent, true)
+            }
+        }
+
+        private fun bindBadge(state: ImportQueueItemState) = with(view) {
             val (icon, colorAttr) = when (state) {
                 ImportQueueItemState.PENDING ->
                     R.drawable.ic_schedule to null
 
-                ImportQueueItemState.UPLOADING,
+                ImportQueueItemState.UPLOADING ->
+                    R.drawable.ic_upload to com.google.android.material.R.attr.colorPrimary
+
                 ImportQueueItemState.UPLOADED ->
-                    null to com.google.android.material.R.attr.colorPrimary
+                    R.drawable.ic_cloud_upload to com.google.android.material.R.attr.colorPrimary
 
                 ImportQueueItemState.IMPORTED ->
                     R.drawable.ic_done to com.google.android.material.R.attr.colorPrimary
@@ -534,9 +556,7 @@ class ImportQueueActivity : BaseActivity() {
                 ImportQueueItemState.CANCELLED ->
                     R.drawable.ic_close to null
             }
-            if (icon != null) {
-                badgeImageView.setImageResource(icon)
-            }
+            badgeImageView.setImageResource(icon)
             badgeLayout.backgroundTintList = ColorStateList.valueOf(
                 if (colorAttr != null)
                     MaterialColors.getColor(badgeLayout, colorAttr)
