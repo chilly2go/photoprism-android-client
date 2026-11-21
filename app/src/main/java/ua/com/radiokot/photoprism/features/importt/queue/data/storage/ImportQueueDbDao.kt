@@ -53,7 +53,7 @@ interface ImportQueueDbDao {
     fun changeStates(fromStates: List<String>, toState: String)
 
     @Query("UPDATE import_queue_items SET state=:toState, error=NULL, failure_reason=NULL WHERE id=:itemId AND state IN (:fromStates)")
-    fun changeItemState(itemId: Long, fromStates: List<String>, toState: String)
+    fun changeItemState(itemId: Long, fromStates: List<String>, toState: String): Int
 
     @Query("DELETE FROM import_queue_items WHERE state IN (:states)")
     fun deleteItemsInStates(states: List<String>)

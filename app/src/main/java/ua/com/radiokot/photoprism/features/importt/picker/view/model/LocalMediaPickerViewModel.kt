@@ -21,6 +21,8 @@ import kotlin.concurrent.thread
  *
  * Local files are hashed (with the hashes cached) and the hashes are checked
  * against the library in bundles, the selected folder first.
+ * Files known to be in the library are shown so right away,
+ * and only re-checked in the background once in a while.
  */
 class LocalMediaPickerViewModel(
     private val reader: LocalMediaReader,
@@ -32,6 +34,7 @@ class LocalMediaPickerViewModel(
     private val lock = Any()
     private var allMedia: List<LocalMedia> = emptyList()
     private val statusById = mutableMapOf<Long, Status>()
+    private var mediaToRecheck: List<LocalMedia> = emptyList()
     private val selectedIds = linkedSetOf<Long>()
     private var selectedBucketId: String? = null
     private var hideInLibrary = true
@@ -88,10 +91,37 @@ class LocalMediaPickerViewModel(
 
     private fun loadAndCheck() {
         val media = reader.readAll()
+        val knownInLibrary: Map<String, Long> =
+            try {
+                libraryHashChecker.getKnownInLibrary()
+            } catch (error: Exception) {
+                log.warn(error) { "loadAndCheck(): failed_getting_known_in_library" }
+                emptyMap()
+            }
+        val recheckBefore = System.currentTimeMillis() - RECHECK_INTERVAL_MS
+        val toRecheck = mutableListOf<LocalMedia>()
 
         synchronized(lock) {
             allMedia = media
-            media.forEach { statusById[it.id] = Status.UNKNOWN }
+            media.forEach { item ->
+                val checkedAt = hasher.getCached(item)?.let(knownInLibrary::get)
+                statusById[item.id] =
+                    if (checkedAt != null)
+                        Status.IN_LIBRARY
+                    else
+                        Status.UNKNOWN
+                if (checkedAt != null && checkedAt < recheckBefore) {
+                    toRecheck += item
+                }
+            }
+            mediaToRecheck = toRecheck
+        }
+
+        log.debug {
+            "loadAndCheck(): loaded:" +
+                    "\nmedia=${media.size}," +
+                    "\nknownInLibrary=${media.size - statusById.values.count { it == Status.UNKNOWN }}," +
+                    "\ntoRecheck=${toRecheck.size}"
         }
 
         postState()
@@ -104,11 +134,51 @@ class LocalMediaPickerViewModel(
                 checkBundle(bundle, hashExecutor)
                 postState()
             }
+
+            recheckKnownInLibrary()
         } finally {
             hashExecutor.shutdownNow()
         }
 
         log.debug { "loadAndCheck(): done" }
+    }
+
+    /**
+     * Checks whether the files known to be in the library are still there,
+     * as they may have been deleted meanwhile.
+     * Their status is kept unless they are found missing.
+     */
+    private fun recheckKnownInLibrary() {
+        val toRecheck = synchronized(lock) { mediaToRecheck }
+
+        for (bundle in toRecheck.chunked(BUNDLE_SIZE)) {
+            if (isCleared || isLibraryUnavailable) {
+                return
+            }
+
+            // The hashes have been cached, otherwise the files wouldn't be here.
+            val hashes = bundle.associateWith { hasher.getCached(it) }
+            val hashesInLibrary = try {
+                libraryHashChecker.getHashesInLibrary(hashes.values.filterNotNull().toSet())
+            } catch (error: Exception) {
+                log.warn(error) { "recheckKnownInLibrary(): check_failed" }
+                return
+            }
+
+            val missing = hashes.filterValues { it != null && it !in hashesInLibrary }.keys
+            if (missing.isNotEmpty()) {
+                synchronized(lock) {
+                    missing.forEach { statusById[it.id] = Status.MISSING }
+                }
+                postState()
+            }
+
+            log.debug {
+                "recheckKnownInLibrary(): rechecked:" +
+                        "\nbundle=${bundle.size}," +
+                        "\nmissing=${missing.size}"
+            }
+        }
     }
 
     /**
@@ -371,6 +441,7 @@ class LocalMediaPickerViewModel(
 
     private companion object {
         private const val BUNDLE_SIZE = 100
+        private const val RECHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
         private const val HASHING_THREADS = 2
     }
 }

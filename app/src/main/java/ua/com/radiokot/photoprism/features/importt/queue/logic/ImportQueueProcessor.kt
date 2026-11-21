@@ -12,6 +12,7 @@ import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.albums.data.model.DestinationAlbum
 import ua.com.radiokot.photoprism.features.importt.model.ImportableFile
 import ua.com.radiokot.photoprism.features.importt.model.ImportableFileRequestBody
+import ua.com.radiokot.photoprism.features.importt.picker.data.storage.LibraryHashesRepository
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemDbEntity
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueFailureReason
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemState
@@ -44,6 +45,8 @@ class ImportQueueProcessor(
     private val sessionService: PhotoPrismSessionService,
     private val uploadService: PhotoPrismUploadService,
     private val filesService: PhotoPrismFilesService,
+    private val libraryHashesRepository: LibraryHashesRepository,
+    private val uploadProgress: ImportQueueUploadProgress,
     private val libraryRootUrl: String,
     private val isStopped: () -> Boolean,
     private val onProgress: (Progress) -> Unit,
@@ -116,9 +119,8 @@ class ImportQueueProcessor(
                     "\nuploadToken=$uploadToken"
         }
 
-        repository.updateItems(items.map { it.copy(state = ImportQueueItemState.UPLOADING.name) })
-        reportProgress(Phase.UPLOADING)
-
+        // Items are marked as being uploaded only once they are actually taken,
+        // so the rest of the chunk is seen as waiting.
         // Check and upload the files in parallel.
         val executor = Executors.newFixedThreadPool(MAX_CONCURRENT_UPLOADS)
         val uploadedItems: List<ImportQueueItemDbEntity>
@@ -126,13 +128,29 @@ class ImportQueueProcessor(
             uploadedItems = executor
                 .invokeAll(items.map { item ->
                     Callable {
-                        checkAndUploadItem(
-                            item = item,
-                            userId = userId,
-                            uploadToken = uploadToken,
-                        ).also { updatedItem ->
-                            repository.updateItems(listOf(updatedItem))
-                            reportProgress(Phase.UPLOADING)
+                        // Removed or stopped meanwhile.
+                        if (isStopped() || !repository.startItem(item.id)) {
+                            return@Callable null
+                        }
+
+                        uploadProgress.set(item.id, ImportQueueUploadProgress.UNKNOWN)
+                        try {
+                            checkAndUploadItem(
+                                item = item.copy(state = ImportQueueItemState.UPLOADING.name),
+                                userId = userId,
+                                uploadToken = uploadToken,
+                            ).also { updatedItem ->
+                                repository.updateItems(listOf(updatedItem))
+                                if (updatedItem.itemState == ImportQueueItemState.ALREADY_IN_LIBRARY) {
+                                    libraryHashesRepository.remember(
+                                        libraryRootUrl = libraryRootUrl,
+                                        sha1s = listOfNotNull(updatedItem.sha1),
+                                    )
+                                }
+                                reportProgress(Phase.UPLOADING)
+                            }
+                        } finally {
+                            uploadProgress.clear(item.id)
                         }
                     }
                 })
@@ -143,7 +161,8 @@ class ImportQueueProcessor(
                         throw error.cause ?: error
                     }
                 }
-                .filter { it.itemState == ImportQueueItemState.UPLOADED }
+                .filter { it?.itemState == ImportQueueItemState.UPLOADED }
+                .filterNotNull()
         } finally {
             executor.shutdownNow()
         }
@@ -228,7 +247,9 @@ class ImportQueueProcessor(
                             body = ImportableFileRequestBody(
                                 importableFile = item.toImportableFile(),
                                 contentResolver = contentResolver,
-                                onReadingProgress = {},
+                                onReadingProgress = { bytesRead ->
+                                    reportUploadProgress(item, bytesRead)
+                                },
                             ),
                         )
                     ),
@@ -342,6 +363,10 @@ class ImportQueueProcessor(
         for (round in 1..rounds) {
             val confirmed = unconfirmed.filter { isInLibrary(it.sha1!!) == true }
             repository.updateItems(confirmed.map { it.copy(state = ImportQueueItemState.IMPORTED.name) })
+            libraryHashesRepository.remember(
+                libraryRootUrl = libraryRootUrl,
+                sha1s = confirmed.mapNotNull(ImportQueueItemDbEntity::sha1),
+            )
             repeat(confirmed.size) { imported() }
 
             unconfirmed = unconfirmed - confirmed.toSet()
@@ -505,6 +530,18 @@ class ImportQueueProcessor(
         while (System.currentTimeMillis() < until && !isStopped()) {
             Thread.sleep(500)
         }
+    }
+
+    private fun reportUploadProgress(item: ImportQueueItemDbEntity, bytesRead: Long) {
+        val size = item.reportedSize
+            ?.takeIf { it > 0 }
+            ?: return
+        // The reported size can't be trusted,
+        // so 100% is only shown once the upload is done.
+        uploadProgress.set(
+            itemId = item.id,
+            percent = (bytesRead * 100 / size).toInt().coerceIn(0, 99),
+        )
     }
 
     private fun reportProgress(phase: Phase) {

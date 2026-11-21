@@ -1,7 +1,6 @@
 package ua.com.radiokot.photoprism.features.importt
 
 import org.koin.android.ext.koin.androidApplication
-import org.koin.core.module.dsl.scopedOf
 import org.koin.core.module.dsl.singleOf
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.bind
@@ -13,7 +12,9 @@ import ua.com.radiokot.photoprism.features.importt.picker.logic.LibraryHashCheck
 import ua.com.radiokot.photoprism.features.importt.picker.logic.LocalMediaHasher
 import ua.com.radiokot.photoprism.features.importt.picker.logic.LocalMediaReader
 import ua.com.radiokot.photoprism.features.importt.picker.view.model.LocalMediaPickerViewModel
+import ua.com.radiokot.photoprism.features.importt.picker.data.storage.LibraryHashesRepository
 import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueRepository
+import ua.com.radiokot.photoprism.features.importt.queue.logic.ImportQueueUploadProgress
 import ua.com.radiokot.photoprism.features.importt.queue.view.model.ImportQueueViewModel
 import ua.com.radiokot.photoprism.features.importt.view.ImportNotificationsManager
 import ua.com.radiokot.photoprism.features.importt.view.model.ImportViewModel
@@ -25,7 +26,13 @@ val importFeatureModule = module {
         viewModelOf(::ImportViewModel)
         viewModelOf(::ImportQueueViewModel)
         viewModelOf(::LocalMediaPickerViewModel)
-        scopedOf(::LibraryHashChecker)
+        scoped {
+            LibraryHashChecker(
+                photosService = get(),
+                libraryHashesRepository = get(),
+                libraryRootUrl = get<EnvSession>().envConnectionParams.rootUrl.toString(),
+            )
+        } bind LibraryHashChecker::class
     }
 
     single {
@@ -49,4 +56,6 @@ val importFeatureModule = module {
 
     singleOf(::ImportNotificationsManager)
     singleOf(::ImportQueueRepository)
+    singleOf(::ImportQueueUploadProgress)
+    singleOf(::LibraryHashesRepository)
 }

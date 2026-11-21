@@ -55,15 +55,25 @@
             tools:ignore="ContentDescription"
             tools:srcCompat="@drawable/ic_done" />
 
-        <com.google.android.material.progressindicator.CircularProgressIndicator
-            android:id="@+id/badge_progress_indicator"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:indeterminate="true"
-            android:visibility="gone"
-            app:indicatorColor="@android:color/white"
-            app:indicatorSize="16dp"
-            app:trackThickness="2dp" />
     </FrameLayout>
+
+    <!-- Upload progress of the file, over the thumbnail. -->
+    <com.google.android.material.progressindicator.CircularProgressIndicator
+        android:id="@+id/upload_progress_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/import_queue_badge_background"
+        android:backgroundTint="#99000000"
+        android:indeterminate="true"
+        android:padding="4dp"
+        android:visibility="gone"
+        app:indicatorColor="@android:color/white"
+        app:indicatorSize="36dp"
+        app:layout_constraintBottom_toBottomOf="@id/image_view"
+        app:layout_constraintEnd_toEndOf="@id/image_view"
+        app:layout_constraintStart_toStartOf="@id/image_view"
+        app:layout_constraintTop_toTopOf="@id/image_view"
+        app:trackColor="#55FFFFFF"
+        app:trackThickness="4dp"
+        tools:visibility="visible" />
 </androidx.constraintlayout.widget.ConstraintLayout>
