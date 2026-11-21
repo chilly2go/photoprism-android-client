@@ -1,5 +1,8 @@
 package ua.com.radiokot.photoprism.features.gallery.view
 
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import ua.com.radiokot.photoprism.env.data.storage.SessionCapabilitiesRepository
+import ua.com.radiokot.photoprism.env.data.model.SessionCapabilities
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -92,6 +95,9 @@ class GalleryActivity : BaseActivity() {
     private var isMovedBackByBackButton = false
     private val fileReturnIntentCreator: FileReturnIntentCreator by inject()
     private val welcomeScreenPreferences: WelcomeScreenPreferences by inject()
+    private val sessionCapabilitiesRepository: SessionCapabilitiesRepository? by lazy {
+        scope.getOrNull()
+    }
 
     private val galleryItemsAdapter = ItemAdapter<GalleryListItem>()
     private lateinit var endlessScrollListener: EndlessRecyclerOnScrollListener
@@ -207,6 +213,9 @@ class GalleryActivity : BaseActivity() {
             )
         }
 
+        // Each start of the gallery checks what the account may do.
+        sessionCapabilitiesRepository?.update()
+
         rootView = ActivityGalleryBinding.inflate(layoutInflater)
         view = IncludeActivityGalleryContentBinding.bind(rootView.contentLayout)
         setContentView(rootView.root)
@@ -287,6 +296,10 @@ class GalleryActivity : BaseActivity() {
                 else
                     count.toString()
 
+            updateMultipleSelectionMenuVisibility()
+        }
+
+        sessionCapabilitiesRepository?.capabilities?.observeOn(AndroidSchedulers.mainThread())?.subscribe(this) {
             updateMultipleSelectionMenuVisibility()
         }
 
@@ -850,6 +863,8 @@ class GalleryActivity : BaseActivity() {
     }
 
     private fun updateMultipleSelectionMenuVisibility() {
+        val capabilities = sessionCapabilitiesRepository?.current
+            ?: SessionCapabilities.ASSUMED
         val multipleSelectionItemsCount = viewModel.selectedItemsCount.value ?: 0
         val state = viewModel.currentState
         val areUserSelectionItemsVisible =
@@ -859,10 +874,18 @@ class GalleryActivity : BaseActivity() {
             forEach { menuItem ->
                 menuItem.isVisible = areUserSelectionItemsVisible
             }
+            findItem(R.id.add_to_album).isVisible =
+                areUserSelectionItemsVisible && capabilities.canUpdateAlbums
+            findItem(R.id.archive).isVisible =
+                areUserSelectionItemsVisible && capabilities.canArchive
+            findItem(R.id.delete).isVisible =
+                areUserSelectionItemsVisible && capabilities.canDelete
             findItem(R.id.add_to_favorites).isVisible =
                 areUserSelectionItemsVisible && viewModel.canAddSelectedToFavorites
+                        && capabilities.canSetFavorite
             findItem(R.id.remove_from_favorites).isVisible =
                 areUserSelectionItemsVisible && viewModel.canRemoveSelectedFromFavorites
+                        && capabilities.canSetFavorite
             findItem(R.id.remove_from_album).isVisible = false
         }
     }

@@ -2,6 +2,8 @@ package ua.com.radiokot.photoprism.di
 
 import okhttp3.HttpUrl
 import org.koin.core.qualifier._q
+import org.koin.core.qualifier.named
+import org.koin.dsl.bind
 import org.koin.dsl.module
 import retrofit2.Retrofit
 import retrofit2.converter.jackson.JacksonConverterFactory
@@ -19,6 +21,7 @@ import ua.com.radiokot.photoprism.api.upload.service.PhotoPrismUploadService
 import ua.com.radiokot.photoprism.api.util.SyncCallAdapter
 import ua.com.radiokot.photoprism.env.data.model.EnvConnectionParams
 import ua.com.radiokot.photoprism.env.data.model.EnvSession
+import ua.com.radiokot.photoprism.env.data.storage.SessionCapabilitiesRepository
 
 class EnvRetrofitParams(
     val apiUrl: HttpUrl,
@@ -101,6 +104,17 @@ val retrofitApiModule = module {
             get<Retrofit>()
                 .create(PhotoPrismPhotosService::class.java)
         }
+
+        scoped {
+            SessionCapabilitiesRepository(
+                // Unlike the factory, follows the session renewal.
+                configService = get<Retrofit>()
+                    .create(PhotoPrismClientConfigService::class.java),
+                preferences = get(named(APP_NO_BACKUP_PREFERENCES)),
+                jsonObjectMapper = get(),
+                libraryRootUrl = get<EnvSession>().envConnectionParams.rootUrl.toString(),
+            )
+        } bind SessionCapabilitiesRepository::class
 
         scoped<PhotoPrismAlbumsService> {
             get<Retrofit>()

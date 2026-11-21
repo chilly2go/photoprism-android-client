@@ -1,5 +1,8 @@
 package ua.com.radiokot.photoprism.features.viewer.view
 
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import ua.com.radiokot.photoprism.env.data.storage.SessionCapabilitiesRepository
+import ua.com.radiokot.photoprism.env.data.model.SessionCapabilities
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
@@ -92,6 +95,12 @@ class MediaViewerActivity : BaseActivity() {
     private val viewModel: GalleryMediaViewerViewModel by viewModel()
     private val videoPlayerCacheViewModel: VideoPlayerCacheViewModel by viewModel()
     private val fileReturnIntentCreator: FileReturnIntentCreator by inject()
+    private val sessionCapabilitiesRepository: SessionCapabilitiesRepository? by lazy {
+        scope.getOrNull()
+    }
+    private val capabilities: SessionCapabilities
+        get() = sessionCapabilitiesRepository?.current
+            ?: SessionCapabilities.ASSUMED
     private val dateTimeDateFormat: DateFormat by inject(named(UTC_DATE_TIME_DATE_FORMAT))
     private val dateTimeYearDateFormat: DateFormat by inject(named(UTC_DATE_TIME_YEAR_DATE_FORMAT))
 
@@ -561,14 +570,19 @@ class MediaViewerActivity : BaseActivity() {
             }
         }
 
-        menu.findItem(R.id.add_to_album).isVisible = viewModel.areActionsEnabled
+        val capabilities = capabilities
+        menu.findItem(R.id.add_to_album).isVisible =
+            viewModel.areActionsEnabled && capabilities.canUpdateAlbums
         menu.findItem(R.id.remove_from_album).isVisible =
             viewModel.areActionsEnabled && viewModel.canRemoveFromAlbum
-        menu.findItem(R.id.archive).isVisible = viewModel.areActionsEnabled
-        menu.findItem(R.id.delete).isVisible = viewModel.areActionsEnabled
+                    && capabilities.canUpdateAlbums
+        menu.findItem(R.id.archive).isVisible =
+            viewModel.areActionsEnabled && capabilities.canArchive
+        menu.findItem(R.id.delete).isVisible =
+            viewModel.areActionsEnabled && capabilities.canDelete
 
         with(menu.findItem(R.id.is_private)) {
-            isVisible = viewModel.areActionsEnabled
+            isVisible = viewModel.areActionsEnabled && capabilities.canSetPrivate
             viewModel.isPrivate.observe(this@MediaViewerActivity) { isPrivate ->
                 isChecked = isPrivate
             }
@@ -750,6 +764,11 @@ class MediaViewerActivity : BaseActivity() {
             this,
             view.buttonsLayout::fadeVisibility
         )
+
+        sessionCapabilitiesRepository?.capabilities?.observeOn(AndroidSchedulers.mainThread())?.subscribe(this) { capabilities ->
+            view.favoriteButton.isVisible = capabilities.canSetFavorite
+            invalidateOptionsMenu()
+        }
 
         viewModel.isToolbarVisible.observe(
             this,
