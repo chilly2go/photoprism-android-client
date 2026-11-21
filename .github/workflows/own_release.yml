@@ -19,6 +19,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # The whole history with tags, to list the commits since the previous release.
+          fetch-depth: 0
 
       - name: Create the signing keystore
         env:
@@ -47,11 +50,28 @@ jobs:
             -PownVersionName="$VERSION_NAME" \
             -PownVersionCode="$VERSION_CODE"
 
+      - name: Write the release notes
+        run: |
+          NOTES_FILE="release-notes/$GITHUB_REF_NAME.md"
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match 'v*-own.*' "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          {
+            if [ -f "$NOTES_FILE" ]; then
+              cat "$NOTES_FILE"
+              echo
+            fi
+            if [ -n "$PREVIOUS_TAG" ]; then
+              echo "### Changes since $PREVIOUS_TAG"
+              echo
+              git log --no-merges --format='- %s' "$PREVIOUS_TAG..$GITHUB_REF_NAME" -- . ':!release-notes'
+            fi
+          } > release-notes.md
+          cat release-notes.md
+
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
-            --notes "Own build with the upload queue and the media picker." \
+            --notes-file release-notes.md \
             app/build/outputs/apk/releaseClone/*.apk
