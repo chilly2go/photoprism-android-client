@@ -396,6 +396,14 @@
     <string name="local_media_picker_in_library">Schon in der Bibliothek</string>
     <string name="local_media_picker_library_unavailable">Server nicht erreichbar, daher werden alle Fotos gezeigt</string>
     <string name="template_local_media_picker_continue">Weiter (%1$d)</string>
+    <string name="local_media_picker_today">Heute</string>
+    <string name="local_media_picker_yesterday">Gestern</string>
+    <string name="template_local_media_picker_day_selected">%1$s von %2$s ausgewählt</string>
+    <plurals name="local_media_picker_day_files">
+        <item quantity="one">%s Datei</item>
+        <item quantity="other">%s Dateien</item>
+    </plurals>
+    <string name="local_media_picker_toggle_day">Tag auswählen oder abwählen</string>
     <string name="local_media_picker_select_all">Alle angezeigten auswählen</string>
     <string name="local_media_picker_clear_selection">Auswahl aufheben</string>
     <string name="local_media_picker_system_picker">Systemauswahl verwenden</string>

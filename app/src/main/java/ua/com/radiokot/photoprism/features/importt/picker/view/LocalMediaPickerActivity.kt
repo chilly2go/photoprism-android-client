@@ -3,6 +3,7 @@ package ua.com.radiokot.photoprism.features.importt.picker.view
 import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
+import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
@@ -20,6 +21,8 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.SimpleItemAnimator
+import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.color.MaterialColors
@@ -30,6 +33,7 @@ import ua.com.radiokot.photoprism.R
 import ua.com.radiokot.photoprism.base.view.BaseActivity
 import ua.com.radiokot.photoprism.databinding.ActivityLocalMediaPickerBinding
 import ua.com.radiokot.photoprism.databinding.ListItemLocalMediaBinding
+import ua.com.radiokot.photoprism.databinding.ListItemLocalMediaDayBinding
 import ua.com.radiokot.photoprism.databinding.ListItemLocalMediaFolderBinding
 import ua.com.radiokot.photoprism.databinding.ListItemLocalMediaFolderHeaderBinding
 import ua.com.radiokot.photoprism.databinding.ListItemLocalMediaFolderMoreBinding
@@ -39,9 +43,11 @@ import ua.com.radiokot.photoprism.extension.barsAndCutout
 import ua.com.radiokot.photoprism.extension.barsAndCutoutPadding
 import ua.com.radiokot.photoprism.features.importt.picker.view.model.LocalMediaPickerViewModel
 import ua.com.radiokot.photoprism.features.importt.picker.view.model.LocalMediaPickerViewModel.Item
+import ua.com.radiokot.photoprism.features.importt.picker.view.model.LocalMediaPickerViewModel.ListItem
 import ua.com.radiokot.photoprism.features.importt.picker.view.model.LocalMediaPickerViewModel.Status
 import ua.com.radiokot.photoprism.features.importt.view.ImportActivity
 import java.text.NumberFormat
+import java.util.Calendar
 
 /**
  * Shows local photos and videos to pick for upload,
@@ -54,6 +60,7 @@ class LocalMediaPickerActivity : BaseActivity() {
     private val picasso: Picasso by inject()
     private val adapter = MediaAdapter()
     private var thumbnailSizePx = 0
+    private lateinit var dragSelectListener: DragSelectTouchListener
     private val numberFormat = NumberFormat.getIntegerInstance()
 
     private val permissionsLauncher = registerForActivityResult(
@@ -88,9 +95,35 @@ class LocalMediaPickerActivity : BaseActivity() {
                 (resources.displayMetrics.density * MIN_THUMBNAIL_SIZE_DP)).toInt()
             .coerceAtLeast(3)
         thumbnailSizePx = resources.displayMetrics.widthPixels / spanCount
-        view.mediaRecyclerView.layoutManager = GridLayoutManager(this, spanCount)
+        view.mediaRecyclerView.layoutManager = GridLayoutManager(this, spanCount).apply {
+            spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                override fun getSpanSize(position: Int): Int =
+                    if (adapter.getItemViewType(position) == VIEW_TYPE_DAY)
+                        spanCount
+                    else
+                        1
+            }
+        }
         view.mediaRecyclerView.adapter = adapter
         view.mediaRecyclerView.setHasFixedSize(true)
+        // Selecting many by dragging changes a lot of items at once,
+        // the default change animation makes them blink.
+        (view.mediaRecyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
+
+        dragSelectListener = DragSelectTouchListener(
+            recyclerView = view.mediaRecyclerView,
+            onRangeChanged = { startPosition, endPosition ->
+                val list = adapter.currentList
+                val range = minOf(startPosition, endPosition)..maxOf(startPosition, endPosition)
+                viewModel.onDragSelectionChanged(
+                    range.mapNotNull { position ->
+                        (list.getOrNull(position) as? ListItem.Media)?.item?.media?.id
+                    }
+                )
+            },
+            onEnded = viewModel::onDragSelectionEnded,
+        )
+        view.mediaRecyclerView.addOnItemTouchListener(dragSelectListener)
 
         view.continueButton.setOnClickListener {
             viewModel.onContinueClicked()
@@ -463,22 +496,96 @@ class LocalMediaPickerActivity : BaseActivity() {
         return true
     }
 
-    private inner class MediaAdapter : ListAdapter<Item, MediaViewHolder>(ItemDiffCallback) {
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
-            MediaViewHolder(
-                ListItemLocalMediaBinding.inflate(
-                    LayoutInflater.from(parent.context),
-                    parent,
-                    false
-                )
-            )
+    private inner class MediaAdapter :
+        ListAdapter<ListItem, RecyclerView.ViewHolder>(ItemDiffCallback) {
 
-        override fun onBindViewHolder(holder: MediaViewHolder, position: Int) =
-            holder.bind(getItem(position))
-
-        override fun onViewRecycled(holder: MediaViewHolder) {
-            picasso.cancelRequest(holder.view.imageView)
+        override fun getItemViewType(position: Int): Int = when (getItem(position)) {
+            is ListItem.Day -> VIEW_TYPE_DAY
+            is ListItem.Media -> VIEW_TYPE_MEDIA
         }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            val inflater = LayoutInflater.from(parent.context)
+            return when (viewType) {
+                VIEW_TYPE_DAY ->
+                    DayViewHolder(ListItemLocalMediaDayBinding.inflate(inflater, parent, false))
+
+                else ->
+                    MediaViewHolder(ListItemLocalMediaBinding.inflate(inflater, parent, false))
+            }
+        }
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            when (val item = getItem(position)) {
+                is ListItem.Day -> (holder as DayViewHolder).bind(item)
+                is ListItem.Media -> (holder as MediaViewHolder).bind(item.item)
+            }
+        }
+
+        override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
+            if (holder is MediaViewHolder) {
+                holder.unbind()
+            }
+        }
+    }
+
+    private inner class DayViewHolder(
+        private val view: ListItemLocalMediaDayBinding,
+    ) : RecyclerView.ViewHolder(view.root) {
+
+        fun bind(day: ListItem.Day) = with(view) {
+            val context = root.context
+            titleTextView.text = formatDay(day.dayStartMs)
+            selectionCheckBox.checkedState = when {
+                day.isAllSelected ->
+                    MaterialCheckBox.STATE_CHECKED
+
+                day.selectedCount > 0 ->
+                    MaterialCheckBox.STATE_INDETERMINATE
+
+                else ->
+                    MaterialCheckBox.STATE_UNCHECKED
+            }
+            countTextView.text =
+                if (day.selectedCount > 0)
+                    context.getString(
+                        R.string.template_local_media_picker_day_selected,
+                        numberFormat.format(day.selectedCount),
+                        numberFormat.format(day.mediaIds.size),
+                    )
+                else
+                    context.resources.getQuantityString(
+                        R.plurals.local_media_picker_day_files,
+                        day.mediaIds.size,
+                        numberFormat.format(day.mediaIds.size),
+                    )
+            root.contentDescription = "${titleTextView.text}, ${countTextView.text}. " +
+                    context.getString(R.string.local_media_picker_toggle_day)
+            root.setOnClickListener {
+                viewModel.onDayClicked(day)
+            }
+        }
+    }
+
+    private fun formatDay(dayStartMs: Long): String {
+        if (DateUtils.isToday(dayStartMs)) {
+            return getString(R.string.local_media_picker_today)
+        }
+        if (DateUtils.isToday(dayStartMs + DateUtils.DAY_IN_MILLIS)) {
+            return getString(R.string.local_media_picker_yesterday)
+        }
+
+        val isThisYear = Calendar.getInstance().get(Calendar.YEAR) ==
+                Calendar.getInstance().apply { timeInMillis = dayStartMs }.get(Calendar.YEAR)
+        return DateUtils.formatDateTime(
+            this,
+            dayStartMs,
+            DateUtils.FORMAT_SHOW_WEEKDAY or DateUtils.FORMAT_SHOW_DATE or
+                    if (isThisYear)
+                        DateUtils.FORMAT_NO_YEAR
+                    else
+                        DateUtils.FORMAT_SHOW_YEAR
+        )
     }
 
     private inner class MediaViewHolder(
@@ -509,22 +616,42 @@ class LocalMediaPickerActivity : BaseActivity() {
             view.root.setOnClickListener {
                 viewModel.onItemClicked(item)
             }
+            // Long press and drag to select or unselect many.
+            view.root.setOnLongClickListener {
+                viewModel.onDragSelectionStarted(item.media.id)
+                dragSelectListener.start(bindingAdapterPosition)
+                true
+            }
+        }
+
+        fun unbind() {
+            boundMediaId = null
+            picasso.cancelRequest(view.imageView)
         }
     }
 
-    private object ItemDiffCallback : DiffUtil.ItemCallback<Item>() {
-        override fun areItemsTheSame(oldItem: Item, newItem: Item) =
-            oldItem.media.id == newItem.media.id
+    private object ItemDiffCallback : DiffUtil.ItemCallback<ListItem>() {
+        override fun areItemsTheSame(oldItem: ListItem, newItem: ListItem) = when {
+            oldItem is ListItem.Media && newItem is ListItem.Media ->
+                oldItem.item.media.id == newItem.item.media.id
 
-        override fun areContentsTheSame(oldItem: Item, newItem: Item) =
+            oldItem is ListItem.Day && newItem is ListItem.Day ->
+                oldItem.dayStartMs == newItem.dayStartMs
+
+            else ->
+                false
+        }
+
+        override fun areContentsTheSame(oldItem: ListItem, newItem: ListItem) =
             oldItem == newItem
     }
-
     private companion object {
         private const val ALWAYS_SHOWN_FOLDERS = 6
         private const val SMALL_FOLDER_SIZE = 20
         private const val MAX_PATH_SEGMENTS = 3
         private const val MIN_THUMBNAIL_SIZE_DP = 80
         private const val SELECTED_SCALE = 0.85f
+        private const val VIEW_TYPE_DAY = 0
+        private const val VIEW_TYPE_MEDIA = 1
     }
 }
