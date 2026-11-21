@@ -24,7 +24,8 @@ class LibraryHashChecker(
         libraryHashesRepository.getCheckedAtBySha1(libraryRootUrl)
 
     /**
-     * @return the [hashes] which are in the library, with private and archived photos included.
+     * @return the [hashes] which are in the library, with private, archived,
+     * hidden and broken files included, like when uploading checks a single file.
      */
     @Throws(IOException::class)
     fun getHashesInLibrary(hashes: Collection<String>): Set<String> {
@@ -32,20 +33,28 @@ class LibraryHashChecker(
             return emptySet()
         }
 
-        // Passed as a separate parameter, as the query has a length limit
-        // beyond which the hash filter is silently ignored.
-        val hashParam = hashes.joinToString(separator = "|")
         val found = mutableSetOf<String>()
 
-        // The archived photos are only returned when asked explicitly.
-        for (archived in listOf(null, true)) {
+        // The search leaves out archived and hidden photos and files with errors
+        // unless asked explicitly, one kind at a time.
+        // Without the permission, the server silently ignores the filter.
+        for (pass in SearchPass.values()) {
+            val notFoundYet = hashes.filterNot(found::contains)
+            if (notFoundYet.isEmpty()) {
+                break
+            }
+
             val photos = photosService.getMergedPhotos(
                 // A photo may have several matching files.
-                count = hashes.size * 2,
+                count = notFoundYet.size * 2,
                 offset = 0,
                 public = false,
-                hash = hashParam,
-                archived = archived,
+                // Passed as a separate parameter, as the query has a length limit
+                // beyond which the hash filter is silently ignored.
+                hash = notFoundYet.joinToString(separator = "|"),
+                archived = pass.archived,
+                hidden = pass.hidden,
+                error = pass.error,
             )
 
             photos.forEach { photo ->
@@ -67,5 +76,17 @@ class LibraryHashChecker(
                         "\nfound=${it.size}"
             }
         }
+    }
+
+    private enum class SearchPass(
+        val archived: Boolean? = null,
+        val hidden: Boolean? = null,
+        val error: Boolean? = null,
+    ) {
+        DEFAULT,
+        ARCHIVED(archived = true),
+        HIDDEN(hidden = true),
+        WITH_ERRORS(error = true),
+        ;
     }
 }
