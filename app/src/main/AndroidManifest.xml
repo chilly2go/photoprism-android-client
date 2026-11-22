@@ -276,6 +276,12 @@
             android:resizeableActivity="true" />
 
         <activity
+            android:name=".features.people.view.PeopleActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".features.labels.view.LabelsActivity"
             android:exported="false"
             android:resizeableActivity="true"

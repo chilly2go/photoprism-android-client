@@ -10,6 +10,7 @@ import retrofit2.converter.scalars.ScalarsConverterFactory
 import ua.com.radiokot.photoprism.api.albums.service.PhotoPrismAlbumsService
 import ua.com.radiokot.photoprism.api.config.service.PhotoPrismClientConfigService
 import ua.com.radiokot.photoprism.api.faces.service.PhotoPrismFacesService
+import ua.com.radiokot.photoprism.api.markers.service.PhotoPrismMarkersService
 import ua.com.radiokot.photoprism.api.geo.service.PhotoPrismGeoService
 import ua.com.radiokot.photoprism.api.labels.service.PhotoPrismLabelsService
 import ua.com.radiokot.photoprism.api.files.service.PhotoPrismFilesService
@@ -128,6 +129,11 @@ val retrofitApiModule = module {
         scoped<PhotoPrismFacesService> {
             get<Retrofit>()
                 .create(PhotoPrismFacesService::class.java)
+        }
+
+        scoped<PhotoPrismMarkersService> {
+            get<Retrofit>()
+                .create(PhotoPrismMarkersService::class.java)
         }
 
         scoped<PhotoPrismFilesService> {

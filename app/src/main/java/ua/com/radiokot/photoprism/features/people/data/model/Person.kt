@@ -29,8 +29,23 @@ class Person(
     private val isFace: Boolean,
     val photoCount: Int,
     val thumbnailHash: String,
+    /**
+     * For a face, the marker representing it, naming the face is naming this marker.
+     * For a person, the marker of the cover.
+     */
+    val markerUid: String? = null,
+    /**
+     * Whether the person is hidden in the library, hidden people are only loaded on request.
+     */
+    val isHidden: Boolean = false,
 ) {
     val hasName: Boolean = name != null
+
+    /**
+     * Whether this is an unnamed face cluster, not a known person.
+     */
+    val isFaceCluster: Boolean
+        get() = isFace
 
     constructor(
         personSubject: PhotoPrismSubject,
@@ -41,6 +56,8 @@ class Person(
         isFace = false,
         photoCount = personSubject.photoCount,
         thumbnailHash = personSubject.thumb,
+        markerUid = personSubject.markerUid?.takeIf(String::isNotEmpty),
+        isHidden = personSubject.hidden == true,
     ) {
         require(personSubject.type == "person") {
             "Expected person subject"
@@ -56,6 +73,8 @@ class Person(
         isFace = true,
         photoCount = face.samples,
         thumbnailHash = face.thumb,
+        markerUid = face.markerUid?.takeIf(String::isNotEmpty),
+        isHidden = face.hidden == true,
     ) {
         require(face.thumb.isNotEmpty()) {
             "The face must have a thumb, make sure it is requested with markers"

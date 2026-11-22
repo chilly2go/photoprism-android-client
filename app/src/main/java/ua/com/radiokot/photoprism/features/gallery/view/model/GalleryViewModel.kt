@@ -555,6 +555,14 @@ class GalleryViewModel(
         )
     }
 
+    fun onPeopleClicked() {
+        eventsSubject.onNext(
+            Event.OpenPeople(
+                defaultSearchConfig = getStateDefaultSearchConfig(),
+            )
+        )
+    }
+
     fun onLabelsClicked() {
         eventsSubject.onNext(
             Event.OpenLabels(
@@ -858,6 +866,10 @@ class GalleryViewModel(
         ) : Event
 
         class OpenLabels(
+            val defaultSearchConfig: SearchConfig,
+        ) : Event
+
+        class OpenPeople(
             val defaultSearchConfig: SearchConfig,
         ) : Event
 

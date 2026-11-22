@@ -74,6 +74,7 @@ import ua.com.radiokot.photoprism.features.gallery.view.model.GalleryMediaRemote
 import ua.com.radiokot.photoprism.features.gallery.view.model.GalleryViewModel
 import ua.com.radiokot.photoprism.features.importt.picker.view.LocalMediaPickerActivity
 import ua.com.radiokot.photoprism.features.labels.view.LabelsActivity
+import ua.com.radiokot.photoprism.features.people.view.PeopleActivity
 import ua.com.radiokot.photoprism.features.map.view.MapActivity
 import ua.com.radiokot.photoprism.features.prefs.view.PreferencesActivity
 import ua.com.radiokot.photoprism.features.viewer.view.MediaViewerActivity
@@ -299,8 +300,9 @@ class GalleryActivity : BaseActivity() {
             updateMultipleSelectionMenuVisibility()
         }
 
-        sessionCapabilitiesRepository?.capabilities?.observeOn(AndroidSchedulers.mainThread())?.subscribe(this) {
+        sessionCapabilitiesRepository?.capabilities?.observeOn(AndroidSchedulers.mainThread())?.subscribe(this) { capabilities ->
             updateMultipleSelectionMenuVisibility()
+            navigationView.setPeopleVisible(capabilities.canSeePeople)
         }
 
         viewModel.itemScale.observeOnMain().subscribe(this) { itemScale ->
@@ -441,6 +443,12 @@ class GalleryActivity : BaseActivity() {
 
                 is GalleryViewModel.Event.OpenLabels -> {
                     openLabels(
+                        defaultSearchConfig = event.defaultSearchConfig,
+                    )
+                }
+
+                is GalleryViewModel.Event.OpenPeople -> {
+                    openPeople(
                         defaultSearchConfig = event.defaultSearchConfig,
                     )
                 }
@@ -1011,6 +1019,21 @@ class GalleryActivity : BaseActivity() {
                     GallerySingleRepositoryActivity.getBundle(
                         title = getString(R.string.favorites),
                         repositoryParams = repositoryParams,
+                    )
+                )
+                .setAction(intent.action)
+        )
+    }
+
+    private fun openPeople(
+        defaultSearchConfig: SearchConfig,
+    ) {
+        proxyOkResultLauncher.launch(
+            Intent(this, PeopleActivity::class.java)
+                .putExtras(intent.extras ?: Bundle())
+                .putExtras(
+                    PeopleActivity.getBundle(
+                        defaultSearchConfig = defaultSearchConfig,
                     )
                 )
                 .setAction(intent.action)

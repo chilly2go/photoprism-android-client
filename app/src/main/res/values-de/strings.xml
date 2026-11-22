@@ -435,4 +435,35 @@
     <string name="local_media_picker_allow">Erlauben</string>
     <string name="local_media_picker_check_again">Erneut prüfen</string>
     <string name="template_import_queue_status_bar">%1$s · %2$s</string>
+    <string name="people_overview_tab_named">Benannt</string>
+    <string name="people_overview_tab_new">Neu</string>
+    <string name="people_overview_no_new_faces">Keine neuen Gesichter</string>
+    <plurals name="people_overview_photos">
+        <item quantity="one">1 Foto</item>
+        <item quantity="other">%1$d Fotos</item>
+    </plurals>
+    <plurals name="people_overview_matches">
+        <item quantity="one">1 Treffer</item>
+        <item quantity="other">%1$d Treffer</item>
+    </plurals>
+    <string name="people_overview_rename">Umbenennen</string>
+    <string name="people_overview_add_to_favorites">Zu Favoriten</string>
+    <string name="people_overview_remove_from_favorites">Aus Favoriten entfernen</string>
+    <string name="people_overview_hide">Ausblenden</string>
+    <string name="people_overview_show_photos">Fotos ansehen</string>
+    <string name="people_overview_name_hint">Name</string>
+    <string name="people_overview_merge_title">Mit %1$s zusammenführen?</string>
+    <string name="people_overview_merge_message">%1$s gibt es schon. Alle Gesichter von %2$s werden %1$s zugeordnet. In der App lässt sich das nicht rückgängig machen.</string>
+    <string name="people_overview_merge">Zusammenführen</string>
+    <string name="people_overview_who_is_this">Wer ist das?</string>
+    <string name="people_overview_library_wide_hint">Namen gelten für alle, die die Bibliothek nutzen.</string>
+    <string name="people_overview_named_as">Als %1$s benannt</string>
+    <string name="people_overview_renamed_to">In %1$s umbenannt</string>
+    <string name="people_overview_merged_into">Mit %1$s zusammengeführt</string>
+    <string name="people_overview_hidden">%1$s ausgeblendet</string>
+    <string name="people_overview_face_hidden">Gesicht ausgeblendet</string>
+    <string name="people_overview_undo">Rückgängig</string>
+    <string name="people_overview_no_permission">Keine Berechtigung, das in der Bibliothek zu ändern</string>
+    <string name="people_overview_failed_to_save">Änderung konnte nicht gespeichert werden</string>
+    <string name="people_overview_read_only">In dieser Bibliothek kannst du Personen nur ansehen</string>
 </resources>
