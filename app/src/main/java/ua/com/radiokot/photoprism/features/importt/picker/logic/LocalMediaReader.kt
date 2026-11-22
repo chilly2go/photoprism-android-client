@@ -48,6 +48,14 @@ class LocalMediaReader(
         readPermissions.any(context::isSelfPermissionGranted)
 
     /**
+     * @return whether the original files with the location data can be read,
+     * which is always the case before Android 10.
+     */
+    fun canReadOriginals(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                || context.isSelfPermissionGranted(Manifest.permission.ACCESS_MEDIA_LOCATION)
+
+    /**
      * @return all the images and videos, newest first.
      */
     fun readAll(): List<LocalMedia> {

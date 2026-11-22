@@ -6,6 +6,7 @@ import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.importt.picker.data.model.LocalMedia
 import ua.com.radiokot.photoprism.features.importt.picker.data.model.LocalMediaHashDbEntity
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.security.MessageDigest
 
 /**
@@ -38,7 +39,10 @@ class LocalMediaHasher(
      * Call [save] to cache the results.
      */
     @Throws(IOException::class)
-    fun calculate(media: LocalMedia): String {
+    fun calculate(
+        media: LocalMedia,
+        isCancelled: () -> Boolean = { false },
+    ): String {
         val digest = MessageDigest.getInstance("SHA-1")
         val input = contentResolver.openInputStream(media.contentUri)
             ?: throw IOException("Can't open input stream")
@@ -46,6 +50,9 @@ class LocalMediaHasher(
         input.use {
             val buffer = ByteArray(64 * 1024)
             while (true) {
+                if (isCancelled()) {
+                    throw InterruptedIOException("Cancelled")
+                }
                 val read = input.read(buffer)
                 if (read < 0) {
                     break
@@ -55,6 +62,27 @@ class LocalMediaHasher(
         }
 
         return digest.digest().joinToString(separator = "") { "%02x".format(it) }
+    }
+
+    /**
+     * Forgets the hashes of the media which is not on the device anymore.
+     */
+    @Synchronized
+    fun forgetAllExcept(mediaIds: Collection<Long>) {
+        val existing = mediaIds.toHashSet()
+        val gone = cache.keys.filterNot(existing::contains)
+        if (gone.isEmpty()) {
+            return
+        }
+
+        // The list is split to stay below the SQLite variable limit.
+        gone.chunked(MAX_SQL_VARIABLES).forEach(dao::delete)
+        gone.forEach(cache::remove)
+
+        log.debug {
+            "forgetAllExcept(): forgot:" +
+                    "\ngone=${gone.size}"
+        }
     }
 
     @Synchronized
@@ -79,5 +107,9 @@ class LocalMediaHasher(
             "save(): saved:" +
                     "\nhashes=${entities.size}"
         }
+    }
+
+    private companion object {
+        private const val MAX_SQL_VARIABLES = 500
     }
 }

@@ -765,10 +765,16 @@ class MediaViewerActivity : BaseActivity() {
             view.buttonsLayout::fadeVisibility
         )
 
-        sessionCapabilitiesRepository?.capabilities?.observeOn(AndroidSchedulers.mainThread())?.subscribe(this) { capabilities ->
-            view.favoriteButton.isVisible = capabilities.canSetFavorite
-            invalidateOptionsMenu()
-        }
+        view.favoriteButton.isVisible = capabilities.canSetFavorite
+        // The menu is built with the current capabilities,
+        // so it is only rebuilt when they change.
+        sessionCapabilitiesRepository?.capabilities
+            ?.skip(1)
+            ?.observeOn(AndroidSchedulers.mainThread())
+            ?.subscribe(this) { capabilities ->
+                view.favoriteButton.isVisible = capabilities.canSetFavorite
+                invalidateOptionsMenu()
+            }
 
         viewModel.isToolbarVisible.observe(
             this,

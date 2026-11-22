@@ -37,6 +37,7 @@ import ua.com.radiokot.photoprism.extension.barsAndCutoutPadding
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueFailureReason
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemState
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueOverview
+import ua.com.radiokot.photoprism.features.importt.queue.logic.ImportQueueUploadProgress
 import ua.com.radiokot.photoprism.features.importt.queue.view.model.ImportQueueViewModel
 import ua.com.radiokot.photoprism.features.importt.queue.view.model.ImportQueueViewModel.Filter
 import ua.com.radiokot.photoprism.features.importt.queue.view.model.ImportQueueViewModel.ListItem
@@ -73,10 +74,117 @@ class ImportQueueActivity : BaseActivity() {
         viewModel.listItems.observe(this) { items ->
             adapter.submitList(items)
             view.emptyLayout.isVisible = items.isEmpty()
-            summary = items.firstOrNull() as? ListItem.Summary
+            val newSummary = items.firstOrNull() as? ListItem.Summary
+            // The menu only depends on a few values, which change rarely.
+            if (newSummary?.menuKey != summary?.menuKey) {
+                invalidateOptionsMenu()
+            }
+            summary = newSummary
+            bindStatusBar()
+        }
+
+        viewModel.allowMobileData.observe(this) {
             invalidateOptionsMenu()
         }
     }
+
+    private val ListItem.Summary.menuKey: List<Any>
+        get() = listOf(
+            (countsByFilter[Filter.IMPORTED] ?: 0) + (countsByFilter[Filter.ALREADY_IN_LIBRARY] ?: 0) > 0,
+            (countsByFilter[Filter.FAILED] ?: 0) > 0,
+            hasRemovableWaiting,
+        )
+
+    /**
+     * Shows the compact status on top once the summary is scrolled away,
+     * so it is always clear what the queue is doing.
+     */
+    private fun bindStatusBar() {
+        val summary = summary
+        val isSummaryVisible =
+            (view.recyclerView.layoutManager as GridLayoutManager)
+                .findFirstVisibleItemPosition()
+                .let { it == RecyclerView.NO_POSITION || it == 0 }
+
+        view.statusBarLayout.isVisible = summary != null && !isSummaryVisible
+        if (summary == null || isSummaryVisible) {
+            return
+        }
+
+        val (statusIcon, statusText) = getStatusIconAndText(summary)
+        view.statusBarImageView.setImageResource(statusIcon)
+        view.statusBarImageView.imageTintList = ColorStateList.valueOf(
+            getStatusColor(view.statusBarImageView, summary)
+        )
+        view.statusBarTextView.text = getString(
+            R.string.template_import_queue_status_bar,
+            statusText,
+            getString(
+                R.string.template_import_queue_overall_progress,
+                numberFormat.format(summary.finishedCount),
+                numberFormat.format(summary.totalCount),
+            )
+        )
+        view.statusBarProgressIndicator.max = summary.progressMax.coerceAtLeast(1)
+        view.statusBarProgressIndicator.setProgressCompat(summary.progress, true)
+
+        with(view.statusBarPauseResumeButton) {
+            isVisible = summary.canPause || summary.canResume
+            if (summary.canPause) {
+                setIconResource(R.drawable.ic_pause)
+                contentDescription = getString(R.string.import_queue_pause)
+                setOnClickListener { viewModel.onPauseClicked() }
+            } else {
+                setIconResource(R.drawable.ic_play)
+                contentDescription = getString(R.string.import_queue_resume)
+                setOnClickListener { viewModel.onResumeClicked() }
+            }
+        }
+    }
+
+    private fun getStatusIconAndText(summary: ListItem.Summary): Pair<Int, String> =
+        when (summary.status) {
+            Status.UPLOADING ->
+                R.drawable.ic_upload to
+                        getString(R.string.import_queue_status_uploading)
+
+            Status.IMPORTING ->
+                R.drawable.ic_cloud_upload to
+                        getString(R.string.import_queue_status_importing)
+
+            Status.WAITING_FOR_WIFI ->
+                R.drawable.ic_schedule to
+                        getString(R.string.import_queue_status_waiting_for_wifi)
+
+            Status.WAITING_FOR_CONNECTION ->
+                R.drawable.ic_schedule to
+                        getString(R.string.import_queue_status_waiting_for_connection)
+
+            Status.PAUSED ->
+                R.drawable.ic_pause to
+                        getString(R.string.import_queue_status_paused)
+
+            Status.DONE ->
+                R.drawable.ic_cloud_done to
+                        getString(R.string.import_queue_status_done)
+
+            Status.DONE_WITH_PROBLEMS ->
+                R.drawable.ic_priority_high to
+                        resources.getQuantityString(
+                            R.plurals.import_queue_status_done_with_problems,
+                            summary.failedCount,
+                            summary.failedCount,
+                        )
+        }
+
+    private fun getStatusColor(view: View, summary: ListItem.Summary): Int =
+        MaterialColors.getColor(
+            view,
+            if (summary.status == Status.DONE_WITH_PROBLEMS)
+                com.google.android.material.R.attr.colorError
+            else
+                com.google.android.material.R.attr.colorPrimary
+        )
 
     private fun initList() {
         val listWidthPx = resources.displayMetrics.widthPixels -
@@ -96,6 +204,11 @@ class ImportQueueActivity : BaseActivity() {
             }
         }
         view.recyclerView.adapter = adapter
+        view.recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                bindStatusBar()
+            }
+        })
         // Item changes are frequent while uploading,
         // the default change animation makes the grid blink.
         view.recyclerView.itemAnimator = null
@@ -120,11 +233,16 @@ class ImportQueueActivity : BaseActivity() {
             (counts[Filter.FAILED] ?: 0) > 0
         menu.findItem(R.id.remove_pending)?.isVisible =
             summary?.hasRemovableWaiting == true
+        menu.findItem(R.id.allow_mobile_data)?.isChecked =
+            viewModel.allowMobileData.value == true
         return super.onPrepareOptionsMenu(menu)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.allow_mobile_data ->
+                viewModel.onAllowMobileDataChanged(!item.isChecked)
+
             R.id.remove_done ->
                 viewModel.onRemoveDoneClicked()
 
@@ -233,6 +351,9 @@ class ImportQueueActivity : BaseActivity() {
         ImportQueueItemState.UPLOADED ->
             R.string.import_queue_item_uploaded
 
+        ImportQueueItemState.IMPORTING ->
+            R.string.import_queue_item_importing
+
         ImportQueueItemState.IMPORTED ->
             R.string.import_queue_item_imported
 
@@ -241,9 +362,6 @@ class ImportQueueActivity : BaseActivity() {
 
         ImportQueueItemState.FAILED ->
             R.string.import_queue_item_failed
-
-        ImportQueueItemState.CANCELLED ->
-            R.string.import_queue_item_cancelled
     }
 
     private fun getFailureText(reason: ImportQueueFailureReason?): Int = when (reason) {
@@ -261,6 +379,9 @@ class ImportQueueActivity : BaseActivity() {
 
         ImportQueueFailureReason.NOT_FOUND_AFTER_IMPORT ->
             R.string.import_queue_reason_not_found_after_import
+
+        ImportQueueFailureReason.NOT_ALLOWED ->
+            R.string.import_queue_reason_not_allowed
 
         null ->
             R.string.import_queue_reason_unknown
@@ -281,6 +402,9 @@ class ImportQueueActivity : BaseActivity() {
 
         ImportQueueFailureReason.NOT_FOUND_AFTER_IMPORT ->
             R.string.import_queue_reason_not_found_after_import_details
+
+        ImportQueueFailureReason.NOT_ALLOWED ->
+            R.string.import_queue_reason_not_allowed_details
 
         null ->
             R.string.import_queue_reason_unknown
@@ -359,44 +483,10 @@ class ImportQueueActivity : BaseActivity() {
         fun bind(summary: ListItem.Summary) = with(view) {
             val context = root.context
 
-            val (statusIcon, statusText) = when (summary.status) {
-                Status.UPLOADING ->
-                    R.drawable.ic_upload to
-                            context.getString(R.string.import_queue_status_uploading)
-
-                Status.IMPORTING ->
-                    R.drawable.ic_cloud_upload to
-                            context.getString(R.string.import_queue_status_importing)
-
-                Status.WAITING_FOR_CONNECTION ->
-                    R.drawable.ic_schedule to
-                            context.getString(R.string.import_queue_status_waiting_for_connection)
-
-                Status.PAUSED ->
-                    R.drawable.ic_pause to
-                            context.getString(R.string.import_queue_status_paused)
-
-                Status.DONE ->
-                    R.drawable.ic_cloud_done to
-                            context.getString(R.string.import_queue_status_done)
-
-                Status.DONE_WITH_PROBLEMS ->
-                    R.drawable.ic_priority_high to
-                            context.resources.getQuantityString(
-                                R.plurals.import_queue_status_done_with_problems,
-                                summary.failedCount,
-                                summary.failedCount,
-                            )
-            }
+            val (statusIcon, statusText) = getStatusIconAndText(summary)
             statusImageView.setImageResource(statusIcon)
             statusImageView.imageTintList = ColorStateList.valueOf(
-                MaterialColors.getColor(
-                    statusImageView,
-                    if (summary.status == Status.DONE_WITH_PROBLEMS)
-                        com.google.android.material.R.attr.colorError
-                    else
-                        com.google.android.material.R.attr.colorPrimary
-                )
+                getStatusColor(statusImageView, summary)
             )
             statusTextView.text = statusText
 
@@ -491,23 +581,21 @@ class ImportQueueActivity : BaseActivity() {
                 loadThumbnail(item, imageView)
             }
 
-            bindUploadProgress(media.uploadPercent)
+            bindProgress(item.state, media.uploadPercent)
 
             videoImageView.isVisible = item.isVideo
             // Files which are not in the library yet are faded,
             // so the grid gets brighter as the upload progresses.
-            imageView.alpha = when (item.state) {
-                ImportQueueItemState.PENDING,
-                ImportQueueItemState.UPLOADING,
-                ImportQueueItemState.UPLOADED,
-                ImportQueueItemState.CANCELLED ->
+            imageView.alpha =
+                if (item.state.isFinal)
+                    1f
+                else
                     0.55f
 
-                else ->
-                    1f
-            }
-
             bindBadge(item.state)
+
+            val caption = getCaption(item.state, media.uploadPercent)
+            captionTextView.text = caption
 
             root.contentDescription = "${item.displayName}, ${getString(getStateText(item.state))}"
             root.setOnClickListener {
@@ -515,7 +603,24 @@ class ImportQueueActivity : BaseActivity() {
             }
         }
 
-        private fun bindUploadProgress(percent: Int?) = with(view) {
+        /**
+         * Shows a progress circle while the file is checked, uploaded or added to the library.
+         */
+        private fun bindProgress(
+            state: ImportQueueItemState,
+            uploadPercent: Int?,
+        ) = with(view) {
+            val percent: Int? = when (state) {
+                ImportQueueItemState.UPLOADING ->
+                    uploadPercent ?: ImportQueueUploadProgress.CHECKING
+
+                ImportQueueItemState.IMPORTING ->
+                    ImportQueueUploadProgress.CHECKING
+
+                else ->
+                    null
+            }
+
             uploadProgressIndicator.isVisible = percent != null
             if (percent == null) {
                 return@with
@@ -533,6 +638,41 @@ class ImportQueueActivity : BaseActivity() {
             }
         }
 
+        private fun getCaption(
+            state: ImportQueueItemState,
+            uploadPercent: Int?,
+        ): String = when (state) {
+            ImportQueueItemState.PENDING ->
+                getString(R.string.import_queue_caption_pending)
+
+            ImportQueueItemState.UPLOADING ->
+                when (val percent = uploadPercent ?: ImportQueueUploadProgress.CHECKING) {
+                    ImportQueueUploadProgress.CHECKING ->
+                        getString(R.string.import_queue_caption_checking)
+
+                    ImportQueueUploadProgress.UPLOADING_UNKNOWN_PERCENT ->
+                        getString(R.string.import_queue_caption_uploading)
+
+                    else ->
+                        getString(R.string.template_import_queue_caption_uploading, percent)
+                }
+
+            ImportQueueItemState.UPLOADED ->
+                getString(R.string.import_queue_caption_uploaded)
+
+            ImportQueueItemState.IMPORTING ->
+                getString(R.string.import_queue_caption_importing)
+
+            ImportQueueItemState.IMPORTED ->
+                getString(R.string.import_queue_caption_imported)
+
+            ImportQueueItemState.ALREADY_IN_LIBRARY ->
+                getString(R.string.import_queue_caption_already_in_library)
+
+            ImportQueueItemState.FAILED ->
+                getString(R.string.import_queue_caption_failed)
+        }
+
         private fun bindBadge(state: ImportQueueItemState) = with(view) {
             val (icon, colorAttr) = when (state) {
                 ImportQueueItemState.PENDING ->
@@ -542,6 +682,9 @@ class ImportQueueActivity : BaseActivity() {
                     R.drawable.ic_upload to com.google.android.material.R.attr.colorPrimary
 
                 ImportQueueItemState.UPLOADED ->
+                    R.drawable.ic_schedule to com.google.android.material.R.attr.colorPrimary
+
+                ImportQueueItemState.IMPORTING ->
                     R.drawable.ic_cloud_upload to com.google.android.material.R.attr.colorPrimary
 
                 ImportQueueItemState.IMPORTED ->
@@ -552,9 +695,6 @@ class ImportQueueActivity : BaseActivity() {
 
                 ImportQueueItemState.FAILED ->
                     R.drawable.ic_priority_high to com.google.android.material.R.attr.colorError
-
-                ImportQueueItemState.CANCELLED ->
-                    R.drawable.ic_close to null
             }
             badgeImageView.setImageResource(icon)
             badgeLayout.backgroundTintList = ColorStateList.valueOf(

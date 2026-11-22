@@ -9,9 +9,13 @@ import ua.com.radiokot.photoprism.base.data.storage.ObjectPersistence
 import ua.com.radiokot.photoprism.env.data.model.EnvAuth
 import ua.com.radiokot.photoprism.env.data.model.EnvSession
 import ua.com.radiokot.photoprism.env.data.storage.EnvSessionHolder
+import ua.com.radiokot.photoprism.env.data.storage.SessionCapabilitiesRepository
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.extension.setManifestComponentEnabled
 import ua.com.radiokot.photoprism.features.ext.memories.data.storage.MemoriesRepository
+import ua.com.radiokot.photoprism.features.importt.picker.data.storage.LibraryHashesRepository
+import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueRepository
+import ua.com.radiokot.photoprism.features.importt.queue.logic.ImportQueueWorker
 import ua.com.radiokot.photoprism.features.importt.view.ImportActivity
 import java.io.File
 
@@ -26,11 +30,29 @@ class DisconnectFromEnvUseCase(
     private val cacheDirectories: Iterable<File>?,
     private val cookieManager: CookieManager?,
     private val memoriesRepository: MemoriesRepository?,
+    private val importQueueRepository: ImportQueueRepository?,
+    private val libraryHashesRepository: LibraryHashesRepository?,
+    private val sessionCapabilitiesRepository: SessionCapabilitiesRepository?,
     private val application: Application,
 ) {
     private val log = kLogger("DisconnectFromEnvUseCase")
 
     operator fun invoke(): Completable = {
+        // Uploads must not continue without the session
+        // or end up in the account connected next.
+        ImportQueueWorker.pause(application)
+        importQueueRepository?.clear()?.also {
+            log.debug { "invoke(): import_queue_cleared" }
+        }
+
+        libraryHashesRepository?.clear()?.also {
+            log.debug { "invoke(): library_hashes_cleared" }
+        }
+
+        sessionCapabilitiesRepository?.clear()?.also {
+            log.debug { "invoke(): session_capabilities_cleared" }
+        }
+
         envSessionHolder.clear().also {
             log.debug { "invoke(): session_holder_cleared" }
         }

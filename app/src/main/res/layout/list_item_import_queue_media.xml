@@ -42,8 +42,8 @@
         android:layout_height="24dp"
         android:layout_margin="5dp"
         android:background="@drawable/import_queue_badge_background"
-        app:layout_constraintBottom_toBottomOf="@id/image_view"
         app:layout_constraintEnd_toEndOf="@id/image_view"
+        app:layout_constraintTop_toTopOf="@id/image_view"
         tools:backgroundTint="#2E7D32">
 
         <androidx.appcompat.widget.AppCompatImageView
@@ -76,4 +76,22 @@
         app:trackColor="#55FFFFFF"
         app:trackThickness="4dp"
         tools:visibility="visible" />
+
+    <!-- What is happening to the file, in words. -->
+    <TextView
+        android:id="@+id/caption_text_view"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="#99000000"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="2"
+        android:paddingHorizontal="4dp"
+        android:paddingVertical="2dp"
+        android:textAppearance="?textAppearanceLabelSmall"
+        android:textColor="@android:color/white"
+        app:layout_constraintBottom_toBottomOf="@id/image_view"
+        app:layout_constraintEnd_toEndOf="@id/image_view"
+        app:layout_constraintStart_toStartOf="@id/image_view"
+        tools:text="Hochgeladen, wartet" />
 </androidx.constraintlayout.widget.ConstraintLayout>

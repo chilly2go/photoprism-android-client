@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Application
 import android.content.Intent
 import android.os.Build
+import android.provider.MediaStore
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
@@ -14,12 +15,16 @@ import io.reactivex.rxjava3.kotlin.toCompletable
 import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.PublishSubject
 import ua.com.radiokot.photoprism.env.data.model.EnvSession
+import ua.com.radiokot.photoprism.env.data.storage.SessionCapabilitiesRepository
 import ua.com.radiokot.photoprism.extension.autoDispose
 import ua.com.radiokot.photoprism.extension.isSelfPermissionGranted
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.extension.observeOnMain
 import ua.com.radiokot.photoprism.features.albums.data.model.DestinationAlbum
 import ua.com.radiokot.photoprism.features.importt.logic.ParseImportIntentUseCase
+import ua.com.radiokot.photoprism.features.importt.picker.logic.LocalMediaReader
+import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueCopies
+import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueuePreferences
 import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueRepository
 import ua.com.radiokot.photoprism.features.importt.queue.logic.ImportQueueWorker
 import ua.com.radiokot.photoprism.features.importt.model.ImportableFile
@@ -31,6 +36,10 @@ class ImportViewModel(
     private val albumsRepository: AlbumsRepository,
     private val session: EnvSession,
     private val importQueueRepository: ImportQueueRepository,
+    private val importQueueCopies: ImportQueueCopies,
+    private val importQueuePreferences: ImportQueuePreferences,
+    private val localMediaReader: LocalMediaReader,
+    private val sessionCapabilitiesRepository: SessionCapabilitiesRepository,
     application: Application,
 ) : AndroidViewModel(application) {
     private val log = kLogger("ImportVM")
@@ -46,6 +55,15 @@ class ImportViewModel(
     private val eventsSubject = PublishSubject.create<Event>()
     val events = eventsSubject.observeOnMain()
     val isStartButtonEnabled: MutableLiveData<Boolean> = MutableLiveData(true)
+
+    /**
+     * Whether the account may upload to the library, as far as known.
+     * Otherwise, the library would refuse every file.
+     */
+    val isUploadAllowed: Boolean
+        get() = sessionCapabilitiesRepository.current.let { capabilities ->
+            !capabilities.isFromLibrary || capabilities.canUpload
+        }
 
     fun initOnce(importIntent: Intent) {
         if (isInitialized) {
@@ -180,8 +198,13 @@ class ImportViewModel(
         eventsSubject.onNext(Event.ShowStartedInBackgroundMessage)
         isStartButtonEnabled.postValue(false)
 
-        files.forEach { file ->
+        val queuedFiles = files.map { file ->
             val uri = file.contentUri.toUri()
+
+            // Device media can be read with the app permissions at any time.
+            if (uri.authority == MediaStore.AUTHORITY && localMediaReader.canRead()) {
+                return@map file
+            }
 
             // Allow reading the URIs after the activity is finished.
             context.grantUriPermission(
@@ -190,24 +213,27 @@ class ImportViewModel(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION,
             )
 
-            // The queue may be worked through after the app process is restarted,
-            // which requires a persisted permission. Not all the providers support it.
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            // Such a permission doesn't survive a restart of the device,
+            // so a file shared by another app is copied, if there is space.
+            importQueueCopies
+                .copy(
+                    contentUri = file.contentUri,
+                    reportedSize = file.reportedSize,
                 )
-            } catch (_: Exception) {
-            }
+                ?.let { copyUri -> file.copy(contentUri = copyUri) }
+                ?: file
         }
 
         val batchId = importQueueRepository.addBatch(
-            files = files,
+            files = queuedFiles,
             albums = albums,
             libraryRootUrl = session.envConnectionParams.rootUrl.toString(),
         )
 
-        ImportQueueWorker.schedule(context)
+        ImportQueueWorker.schedule(
+            context = context,
+            allowMobileData = importQueuePreferences.allowMobileData,
+        )
 
         log.debug {
             "startImportInBackgroundAndFinish(): finishing_after_adding_to_queue:" +

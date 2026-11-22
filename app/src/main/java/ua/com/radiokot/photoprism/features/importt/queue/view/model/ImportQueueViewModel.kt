@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MediatorLiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.Observer
 import androidx.work.WorkInfo
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.core.Completable
@@ -14,10 +15,13 @@ import ua.com.radiokot.photoprism.extension.autoDispose
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemState
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueOverview
+import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueuePreferences
 import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueRepository
 import ua.com.radiokot.photoprism.features.importt.queue.logic.ImportQueueUploadProgress
 import ua.com.radiokot.photoprism.features.importt.queue.logic.ImportQueueWorker
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Shows the whole upload queue as one list of files,
@@ -25,6 +29,7 @@ import java.util.concurrent.TimeUnit
  */
 class ImportQueueViewModel(
     private val repository: ImportQueueRepository,
+    private val preferences: ImportQueuePreferences,
     uploadProgress: ImportQueueUploadProgress,
     application: Application,
 ) : AndroidViewModel(application) {
@@ -53,29 +58,70 @@ class ImportQueueViewModel(
             }
         }
 
+    private val _allowMobileData = MutableLiveData(preferences.allowMobileData)
+
+    /**
+     * Whether files may be uploaded over mobile data, not only over Wi-Fi.
+     */
+    val allowMobileData: LiveData<Boolean> = _allowMobileData
+
+    private val _listItems = MutableLiveData<List<ListItem>>()
+
     /**
      * Summary on top, then the files grouped by when they were added.
      * Empty if there is nothing in the queue.
+     * Built in the background, as the queue may have thousands of files.
      */
-    val listItems: LiveData<List<ListItem>> =
-        MediatorLiveData<List<ListItem>>().apply {
-            fun update() {
-                val overview = overview.value
-                    ?: return
-                value = buildListItems(
-                    overview = overview,
-                    workState = workState.value ?: WorkState.IDLE,
-                    filter = filter.value!!,
-                    uploadPercents = uploadPercents.value!!,
-                )
-            }
-            addSource(overview) { update() }
-            addSource(uploadPercents) { update() }
-            addSource(workState) { update() }
-            addSource(filter) { update() }
+    val listItems: LiveData<List<ListItem>> = _listItems
+
+    private val listBuilder = Executors.newSingleThreadExecutor()
+    private val isListBuildScheduled = AtomicBoolean(false)
+
+    @Volatile
+    private var listInputs: ListInputs? = null
+
+    private val listInputsMediator = MediatorLiveData<Unit>().apply {
+        fun update() {
+            listInputs = ListInputs(
+                overview = overview.value
+                    ?: return,
+                workState = workState.value ?: WorkState.IDLE,
+                filter = filter.value!!,
+                uploadPercents = uploadPercents.value!!,
+                allowMobileData = _allowMobileData.value!!,
+            )
+            scheduleListBuild()
         }
+        addSource(overview) { update() }
+        addSource(uploadPercents) { update() }
+        addSource(workState) { update() }
+        addSource(filter) { update() }
+        addSource(_allowMobileData) { update() }
+    }
+
+    private val listInputsObserver = Observer<Unit> {}
+
+    /**
+     * Builds the list from the latest inputs.
+     * Changes made while building are picked up by one more build,
+     * so fast progress updates don't pile up.
+     */
+    private fun scheduleListBuild() {
+        if (!isListBuildScheduled.compareAndSet(false, true)) {
+            return
+        }
+        listBuilder.execute {
+            isListBuildScheduled.set(false)
+            val inputs = listInputs
+                ?: return@execute
+            _listItems.postValue(buildListItems(inputs))
+        }
+    }
 
     init {
+        // Not observed by a view, as the list is built in the background.
+        listInputsMediator.observeForever(listInputsObserver)
+
         repository.changes
             .throttleLatest(500, TimeUnit.MILLISECONDS, true)
             .observeOn(Schedulers.io())
@@ -98,12 +144,9 @@ class ImportQueueViewModel(
             .autoDispose(this)
     }
 
-    private fun buildListItems(
-        overview: ImportQueueOverview,
-        workState: WorkState,
-        filter: Filter,
-        uploadPercents: Map<Long, Int>,
-    ): List<ListItem> {
+    private fun buildListItems(inputs: ListInputs): List<ListItem> {
+        val (overview, workState, filter, uploadPercents, allowMobileData) = inputs
+
         if (overview.items.isEmpty()) {
             return emptyList()
         }
@@ -111,20 +154,24 @@ class ImportQueueViewModel(
         val waitingCount = overview.count(*Filter.PENDING.states)
         val uploadingCount = overview.count(ImportQueueItemState.UPLOADING)
         val uploadedCount = overview.count(ImportQueueItemState.UPLOADED)
-        val inProgressCount = uploadingCount + uploadedCount
+        val importingCount = overview.count(ImportQueueItemState.IMPORTING)
+        val inProgressCount = uploadingCount + uploadedCount + importingCount
         val failedCount = overview.count(ImportQueueItemState.FAILED)
         val hasWorkLeft = waitingCount > 0
-        val totalCount = overview.items.size - overview.count(ImportQueueItemState.CANCELLED)
+        val totalCount = overview.items.size
 
         val status = when {
             // The uploaded files are being added to the library,
             // nothing is being uploaded meanwhile.
             hasWorkLeft && workState == WorkState.RUNNING
-                    && uploadingCount == 0 && uploadedCount > 0 ->
+                    && importingCount > 0 ->
                 Status.IMPORTING
 
             hasWorkLeft && workState == WorkState.RUNNING ->
                 Status.UPLOADING
+
+            hasWorkLeft && workState == WorkState.WAITING && !allowMobileData ->
+                Status.WAITING_FOR_WIFI
 
             hasWorkLeft && workState == WorkState.WAITING ->
                 Status.WAITING_FOR_CONNECTION
@@ -145,7 +192,8 @@ class ImportQueueViewModel(
                 ImportQueueItemState.UPLOADING ->
                     (uploadPercents[item.id] ?: 0).coerceAtLeast(0) * UPLOAD_SHARE / 100
 
-                ImportQueueItemState.UPLOADED ->
+                ImportQueueItemState.UPLOADED,
+                ImportQueueItemState.IMPORTING ->
                     UPLOAD_SHARE
 
                 else ->
@@ -190,7 +238,7 @@ class ImportQueueViewModel(
                             item = item,
                             uploadPercent =
                                 if (item.state == ImportQueueItemState.UPLOADING)
-                                    uploadPercents[item.id] ?: ImportQueueUploadProgress.UNKNOWN
+                                    uploadPercents[item.id] ?: ImportQueueUploadProgress.CHECKING
                                 else
                                     null,
                         )
@@ -217,17 +265,49 @@ class ImportQueueViewModel(
 
     fun onResumeClicked() {
         log.debug { "onResumeClicked(): resuming" }
-        ImportQueueWorker.schedule(context)
+        scheduleWorker()
     }
 
     fun onRetryAllFailedClicked() = runInBackground {
         repository.retryAllFailedItems()
-        ImportQueueWorker.schedule(context)
+        scheduleWorker()
     }
 
     fun onRetryItemClicked(itemId: Long) = runInBackground {
         repository.retryItem(itemId)
-        ImportQueueWorker.schedule(context)
+        scheduleWorker()
+    }
+
+    fun onAllowMobileDataChanged(allow: Boolean) {
+        if (allow == preferences.allowMobileData) {
+            return
+        }
+
+        log.debug {
+            "onAllowMobileDataChanged(): changing:" +
+                    "\nallow=$allow"
+        }
+
+        preferences.allowMobileData = allow
+        _allowMobileData.value = allow
+
+        // Unless paused, apply the network requirement to the work right away.
+        if (workState.value != WorkState.IDLE) {
+            scheduleWorker(restart = true)
+        }
+    }
+
+    private fun scheduleWorker(restart: Boolean = false) =
+        ImportQueueWorker.schedule(
+            context = context,
+            allowMobileData = preferences.allowMobileData,
+            restart = restart,
+        )
+
+    override fun onCleared() {
+        listInputsMediator.removeObserver(listInputsObserver)
+        listBuilder.shutdownNow()
+        super.onCleared()
     }
 
     fun onRemoveItemClicked(itemId: Long) = runInBackground {
@@ -259,6 +339,14 @@ class ImportQueueViewModel(
             .autoDispose(this)
     }
 
+    private data class ListInputs(
+        val overview: ImportQueueOverview,
+        val workState: WorkState,
+        val filter: Filter,
+        val uploadPercents: Map<Long, Int>,
+        val allowMobileData: Boolean,
+    )
+
     private enum class WorkState {
         RUNNING,
 
@@ -272,6 +360,7 @@ class ImportQueueViewModel(
     enum class Status {
         UPLOADING,
         IMPORTING,
+        WAITING_FOR_WIFI,
         WAITING_FOR_CONNECTION,
         PAUSED,
         DONE,
@@ -284,6 +373,7 @@ class ImportQueueViewModel(
             ImportQueueItemState.PENDING,
             ImportQueueItemState.UPLOADING,
             ImportQueueItemState.UPLOADED,
+            ImportQueueItemState.IMPORTING,
         ),
         IMPORTED(ImportQueueItemState.IMPORTED),
         ALREADY_IN_LIBRARY(ImportQueueItemState.ALREADY_IN_LIBRARY),
@@ -314,8 +404,8 @@ class ImportQueueViewModel(
         data class Media(
             val item: ImportQueueOverview.Item,
             /**
-             * Set while the file is being uploaded,
-             * [ImportQueueUploadProgress.UNKNOWN] while it is being checked.
+             * Set while the file is being uploaded or checked,
+             * see [ImportQueueUploadProgress.percentsByItemId].
              */
             val uploadPercent: Int?,
         ) : ListItem

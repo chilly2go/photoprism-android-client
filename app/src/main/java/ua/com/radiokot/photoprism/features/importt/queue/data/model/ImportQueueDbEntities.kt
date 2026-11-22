@@ -64,9 +64,16 @@ data class ImportQueueItemDbEntity(
      */
     @ColumnInfo("failure_reason")
     val failureReason: String? = null,
+    /**
+     * Token of the server upload folder the file was uploaded to,
+     * kept until the library has added the file,
+     * so an interrupted import can be finished without uploading again.
+     */
+    @ColumnInfo("upload_token")
+    val uploadToken: String? = null,
 ) {
     val itemState: ImportQueueItemState
-        get() = ImportQueueItemState.valueOf(state)
+        get() = ImportQueueItemState.fromName(state)
 }
 
 data class ImportQueueStateCount(

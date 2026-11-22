@@ -14,6 +14,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.forEach
 import androidx.core.view.updatePadding
 import androidx.lifecycle.LifecycleOwner
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.search.SearchBar
 import com.squareup.picasso.Picasso
@@ -65,6 +66,28 @@ class GallerySearchBarView(
         initBar()
 
         subscribeToState()
+
+        // The import is to be hidden as soon as the library tells it is not allowed.
+        scope.getOrNull<SessionCapabilitiesRepository>()
+            ?.capabilities
+            ?.observeOn(AndroidSchedulers.mainThread())
+            ?.subscribe(this) {
+                updateImportVisibility()
+            }
+    }
+
+    private var lastState: GallerySearchViewModel.State? = null
+
+    private fun updateImportVisibility() {
+        val importItem = menuItems[R.id.importt]
+            ?: return
+        // Import is not visible on TV:
+        // 1. It would require more search bar focus hassle
+        // 2. Bro, what are you going to import from a TV?!
+        importItem.isVisible =
+            lastState is GallerySearchViewModel.State.NoSearch
+                    && !tvDetector.isRunningOnTv
+                    && scope.getOrNull<SessionCapabilitiesRepository>()?.current?.canUpload != false
     }
 
     private fun initBar() = with(searchBar) {
@@ -182,10 +205,8 @@ class GallerySearchBarView(
         // Import is not visible on TV:
         // 1. It would require more search bar focus hassle
         // 2. Bro, what are you going to import from a TV?!
-        menuItems[R.id.importt]!!.isVisible =
-            state is GallerySearchViewModel.State.NoSearch
-                    && !tvDetector.isRunningOnTv
-                    && scope.getOrNull<SessionCapabilitiesRepository>()?.current?.canUpload != false
+        lastState = state
+        updateImportVisibility()
 
         log.debug {
             "subscribeToState(): handled_new_state:" +

@@ -4,7 +4,8 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 
 /**
- * SHA-1 of a file known to be in the library.
+ * What is known about a file SHA-1 in the library:
+ * whether it was there when last checked.
  */
 @Entity(
     tableName = "library_hashes",
@@ -16,8 +17,15 @@ data class LibraryHashDbEntity(
     @ColumnInfo(name = "sha1")
     val sha1: String,
     /**
-     * When the library was last seen having the file.
+     * When the library was last checked for the file.
      */
     @ColumnInfo(name = "checked_at_ms")
     val checkedAtMs: Long,
+    /**
+     * Whether the library had the file when checked.
+     * Files which are not there are remembered too,
+     * so they are not asked about each time the picker opens.
+     */
+    @ColumnInfo(name = "in_library", defaultValue = "1")
+    val isInLibrary: Boolean = true,
 )

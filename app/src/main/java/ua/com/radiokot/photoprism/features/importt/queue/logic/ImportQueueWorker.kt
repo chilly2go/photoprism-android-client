@@ -1,5 +1,6 @@
 package ua.com.radiokot.photoprism.features.importt.queue.logic
 
+import android.Manifest
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -18,6 +19,7 @@ import org.koin.core.component.inject
 import org.koin.core.scope.Scope
 import ua.com.radiokot.photoprism.di.DI_SCOPE_SESSION
 import ua.com.radiokot.photoprism.env.data.model.EnvSession
+import ua.com.radiokot.photoprism.extension.isSelfPermissionGranted
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.albums.data.storage.AlbumsRepository
 import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueRepository
@@ -38,6 +40,7 @@ class ImportQueueWorker(
         get() = getKoin().getScopeOrNull(DI_SCOPE_SESSION)
     private val repository: ImportQueueRepository by inject()
     private val notificationsManager: ImportNotificationsManager by inject()
+    private val runGuard: ImportQueueRunGuard by inject()
 
     @Volatile
     private var lastProgress: ImportQueueProcessor.Progress? = null
@@ -54,9 +57,35 @@ class ImportQueueWorker(
             return Result.success()
         }
 
-        updateForeground(force = true)
+        // A previous worker may still be finishing its upload.
+        if (!runGuard.acquire(::isStopped)) {
+            log.debug {
+                "doWork(): stopped_while_waiting_for_previous_run"
+            }
 
+            return Result.success()
+        }
+
+        try {
+            return doGuardedWork(sessionScope)
+        } finally {
+            runGuard.release()
+        }
+    }
+
+    private fun doGuardedWork(sessionScope: Scope): Result {
+        // No other worker runs now, so the items in progress are leftovers.
         repository.requeueInterruptedItems()
+
+        if (!repository.hasWork()) {
+            log.debug {
+                "doGuardedWork(): skip_as_nothing_to_do"
+            }
+
+            return Result.success()
+        }
+
+        updateForeground(force = true)
 
         val processor = ImportQueueProcessor(
             repository = repository,
@@ -67,6 +96,10 @@ class ImportQueueWorker(
             libraryHashesRepository = get(),
             uploadProgress = get(),
             libraryRootUrl = sessionScope.get<EnvSession>().envConnectionParams.rootUrl.toString(),
+            canReadOriginals = {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                        && applicationContext.isSelfPermissionGranted(Manifest.permission.ACCESS_MEDIA_LOCATION)
+            },
             isStopped = ::isStopped,
             onProgress = { progress ->
                 lastProgress = progress
@@ -76,9 +109,19 @@ class ImportQueueWorker(
 
         val result = try {
             processor.run()
+        } catch (error: ImportQueueProcessor.NotAllowedException) {
+            log.warn(error) {
+                "doGuardedWork(): not_allowed"
+            }
+
+            repository.requeueInterruptedItems()
+            notificationsManager.notifyQueueNotAllowed()
+
+            // Retrying won't help until the permissions are changed.
+            return Result.success()
         } catch (error: Exception) {
             log.error(error) {
-                "doWork(): processing_failed"
+                "doGuardedWork(): processing_failed"
             }
 
             // Show the unfinished files as waiting rather than uploading.
@@ -90,6 +133,8 @@ class ImportQueueWorker(
 
             // Retry later, the progress is kept in the queue.
             return Result.retry()
+        } finally {
+            repository.deleteUnneededCopies()
         }
 
         if (isStopped) {
@@ -110,7 +155,7 @@ class ImportQueueWorker(
         }
 
         log.debug {
-            "doWork(): completed:" +
+            "doGuardedWork(): completed:" +
                     "\nresult=$result," +
                     "\nisStopped=$isStopped"
         }
@@ -168,17 +213,33 @@ class ImportQueueWorker(
          * Makes sure the queue is being worked through.
          * If the worker is already running, another run is appended,
          * so items added at the very end of the current run are not missed.
+         *
+         * @param allowMobileData whether to upload over mobile data, not only over Wi-Fi
+         * @param restart whether to replace the running worker,
+         * for example, to apply changed network constraints
          */
-        fun schedule(context: Context) {
+        fun schedule(
+            context: Context,
+            allowMobileData: Boolean,
+            restart: Boolean = false,
+        ) {
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(
                     UNIQUE_WORK_NAME,
-                    ExistingWorkPolicy.APPEND_OR_REPLACE,
+                    if (restart)
+                        ExistingWorkPolicy.REPLACE
+                    else
+                        ExistingWorkPolicy.APPEND_OR_REPLACE,
                     OneTimeWorkRequestBuilder<ImportQueueWorker>()
                         .addTag(TAG)
                         .setConstraints(
                             Constraints.Builder()
-                                .setRequiredNetworkType(NetworkType.CONNECTED)
+                                .setRequiredNetworkType(
+                                    if (allowMobileData)
+                                        NetworkType.CONNECTED
+                                    else
+                                        NetworkType.UNMETERED
+                                )
                                 .build()
                         )
                         .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
