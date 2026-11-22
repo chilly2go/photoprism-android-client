@@ -185,6 +185,8 @@
     <string name="extensions_preferences">Extensions</string>
     <string name="extensions_preferences_summary">Extra features for the gallery</string>
     <string name="archive_action">Archive</string>
+    <string name="restore_action">Restore</string>
+    <string name="archive_title">Archive</string>
     <string name="media_viewer_deleting_confirmation">Delete this item forever?</string>
     <string name="extension_store_preference">@string/extension_catalog</string>
     <string name="extension_store_title">@string/extension_catalog</string>

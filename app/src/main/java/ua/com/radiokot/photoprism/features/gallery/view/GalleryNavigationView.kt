@@ -18,6 +18,7 @@ import ua.com.radiokot.photoprism.features.gallery.view.model.GalleryViewModel
 import android.content.Context
 import android.content.Intent
 import ua.com.radiokot.photoprism.features.importt.queue.view.ImportQueueActivity
+import ua.com.radiokot.photoprism.features.gallery.data.storage.SimpleGalleryMediaRepository
 
 class GalleryNavigationView(
     private val viewModel: GalleryViewModel,
@@ -104,6 +105,21 @@ class GalleryNavigationView(
 
         navigationMenu.findItem(R.id.folders)
             .setOnMenuItemClickListener(getClickListener(viewModel::onFoldersClicked))
+
+        navigationMenu.findItem(R.id.archive)
+            ?.setOnMenuItemClickListener(getClickListener {
+                context.startActivity(
+                    Intent(context, GallerySingleRepositoryActivity::class.java)
+                        .putExtras(
+                            GallerySingleRepositoryActivity.getBundle(
+                                title = context.getString(R.string.archive_title),
+                                repositoryParams = SimpleGalleryMediaRepository.Params(
+                                    archived = true,
+                                ),
+                            )
+                        )
+                )
+            })
 
         navigationMenu.findItem(R.id.upload_queue)
             ?.setOnMenuItemClickListener(getClickListener {

@@ -223,6 +223,9 @@ class GallerySingleRepositoryActivity : BaseActivity() {
                     R.id.archive ->
                         viewModel.onArchiveMultipleSelectionClicked()
 
+                    R.id.restore ->
+                        viewModel.onRestoreMultipleSelectionClicked()
+
                     R.id.delete ->
                         viewModel.onDeleteMultipleSelectionClicked()
 
@@ -312,7 +315,9 @@ class GallerySingleRepositoryActivity : BaseActivity() {
             findItem(R.id.add_to_album).isVisible =
                 areUserSelectionItemsVisible && capabilities.canUpdateAlbums
             findItem(R.id.archive).isVisible =
-                areUserSelectionItemsVisible && capabilities.canArchive
+                areUserSelectionItemsVisible && capabilities.canArchive && !viewModel.isArchive
+            findItem(R.id.restore).isVisible =
+                areUserSelectionItemsVisible && capabilities.canArchive && viewModel.isArchive
             findItem(R.id.delete).isVisible =
                 areUserSelectionItemsVisible && capabilities.canDelete
             findItem(R.id.add_to_favorites).isVisible =

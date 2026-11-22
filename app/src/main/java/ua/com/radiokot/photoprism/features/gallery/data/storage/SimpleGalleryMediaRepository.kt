@@ -85,6 +85,7 @@ class SimpleGalleryMediaRepository(
                 count = lookaheadLimit,
                 offset = offset,
                 q = params.query,
+                archived = params.archived.takeIf { it },
                 order = when (pagingOrder) {
                     PagingOrder.DESC -> PhotoPrismOrder.NEWEST
                     PagingOrder.ASC -> PhotoPrismOrder.OLDEST
@@ -187,6 +188,7 @@ class SimpleGalleryMediaRepository(
                 count = 1,
                 offset = 0,
                 q = params.query,
+                archived = params.archived.takeIf { it },
                 order = PhotoPrismOrder.NEWEST
             )
                 .firstOrNull()
@@ -200,6 +202,7 @@ class SimpleGalleryMediaRepository(
                 count = 1,
                 offset = 0,
                 q = params.query,
+                archived = params.archived.takeIf { it },
                 order = PhotoPrismOrder.OLDEST
             )
                 .firstOrNull()
@@ -315,10 +318,33 @@ class SimpleGalleryMediaRepository(
             removeLocally(itemUids.toSet())
         }
 
+    /**
+     * Deletes the items forever.
+     * PhotoPrism only deletes archived photos and skips the rest,
+     * so the items are archived first unless this is the archive.
+     */
     fun delete(
         itemUids: Collection<String>
     ): Completable = {
-        photoPrismPhotosService.batchDelete(PhotoPrismBatchPhotoUids(itemUids))
+        val uids = PhotoPrismBatchPhotoUids(itemUids)
+        if (!params.archived) {
+            photoPrismPhotosService.batchArchive(uids)
+        }
+        photoPrismPhotosService.batchDelete(uids)
+    }
+        .toCompletable()
+        .subscribeOn(Schedulers.io())
+        .doOnComplete {
+            removeLocally(itemUids.toSet())
+        }
+
+    /**
+     * Brings archived items back to the library.
+     */
+    fun restore(
+        itemUids: Collection<String>
+    ): Completable = {
+        photoPrismPhotosService.batchRestore(PhotoPrismBatchPhotoUids(itemUids))
     }
         .toCompletable()
         .subscribeOn(Schedulers.io())
@@ -356,6 +382,7 @@ class SimpleGalleryMediaRepository(
      * to filter out items with any of them.
      * @param pageLimit target limit setting the minimum number of items in the page.
      * The actual pages are bigger due to the PhotoPrism pagination workaround.
+     * @param archived whether to show the archive instead of the library
      */
     @Parcelize
     data class Params(
@@ -365,6 +392,7 @@ class SimpleGalleryMediaRepository(
         val postFilterExcludePersonIds: Set<String> = emptySet(),
         val pageLimit: Int = DEFAULT_PAGE_LIMIT,
         val itemsOrder: GalleryItemsOrder = GalleryItemsOrder.NEWEST_FIRST,
+        val archived: Boolean = false,
     ) : Parcelable {
 
         constructor(

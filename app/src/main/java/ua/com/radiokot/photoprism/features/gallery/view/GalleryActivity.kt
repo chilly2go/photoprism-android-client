@@ -878,6 +878,8 @@ class GalleryActivity : BaseActivity() {
                 areUserSelectionItemsVisible && capabilities.canUpdateAlbums
             findItem(R.id.archive).isVisible =
                 areUserSelectionItemsVisible && capabilities.canArchive
+            // The library has nothing to restore, that's for the archive.
+            findItem(R.id.restore).isVisible = false
             findItem(R.id.delete).isVisible =
                 areUserSelectionItemsVisible && capabilities.canDelete
             findItem(R.id.add_to_favorites).isVisible =

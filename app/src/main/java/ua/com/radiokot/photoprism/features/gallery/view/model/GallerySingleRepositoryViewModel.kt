@@ -398,6 +398,30 @@ class GallerySingleRepositoryViewModel(
         )
     }
 
+    /**
+     * Whether the archive is shown instead of the library.
+     */
+    val isArchive: Boolean
+        get() = currentMediaRepository?.params?.archived == true
+
+    fun onRestoreMultipleSelectionClicked() {
+        check(currentState is State.Selecting.ForUser) {
+            "Restore multiple selection button is only clickable when selecting"
+        }
+
+        check(selectedMediaByUid.isNotEmpty()) {
+            "Restore multiple selection button is only clickable when something is selected"
+        }
+
+        galleryMediaRemoteActionsViewModel.restoreGalleryMedia(
+            mediaUids = selectedMediaByUid.keys.toList(),
+            currentMediaRepository = currentMediaRepository.checkNotNull {
+                "There must be a media repository to restore items from"
+            },
+            onStarted = ::switchToViewing,
+        )
+    }
+
     fun onArchiveMultipleSelectionClicked() {
         check(currentState is State.Selecting.ForUser) {
             "Archive multiple selection button is only clickable when selecting"
