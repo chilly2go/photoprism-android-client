@@ -1,6 +1,7 @@
 package ua.com.radiokot.photoprism.features.importt.picker.logic
 
 import android.content.ContentResolver
+import android.net.Uri
 import ua.com.radiokot.photoprism.db.AppDatabase
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.importt.picker.data.model.LocalMedia
@@ -26,25 +27,38 @@ class LocalMediaHasher(
 
     @Synchronized
     fun getCached(media: LocalMedia): String? =
+        getValidCacheEntry(media)?.sha1
+
+    /**
+     * @return cached hash of the [media] read with the location data redacted,
+     * see [LocalMediaHashDbEntity.redactedSha1].
+     */
+    @Synchronized
+    fun getCachedRedacted(media: LocalMedia): String? =
+        getValidCacheEntry(media)?.redactedSha1
+
+    private fun getValidCacheEntry(media: LocalMedia): LocalMediaHashDbEntity? =
         cache[media.id]
             ?.takeIf {
                 it.size == media.size
                         && it.dateModified == media.dateModified
                         && it.isOriginal == media.isOriginal
             }
-            ?.sha1
 
     /**
      * Calculates the hash of the [media] contents.
      * Call [save] to cache the results.
+     *
+     * @param uri to read from, [LocalMedia.uri] to get the redacted contents
      */
     @Throws(IOException::class)
     fun calculate(
         media: LocalMedia,
+        uri: Uri = media.contentUri,
         isCancelled: () -> Boolean = { false },
     ): String {
         val digest = MessageDigest.getInstance("SHA-1")
-        val input = contentResolver.openInputStream(media.contentUri)
+        val input = contentResolver.openInputStream(uri)
             ?: throw IOException("Can't open input stream")
 
         input.use {
@@ -105,6 +119,28 @@ class LocalMediaHasher(
 
         log.debug {
             "save(): saved:" +
+                    "\nhashes=${entities.size}"
+        }
+    }
+
+    /**
+     * Caches the hashes of the redacted contents of the media
+     * whose hashes are already cached by [save].
+     */
+    @Synchronized
+    fun saveRedacted(redactedHashes: Map<LocalMedia, String>) {
+        val entities = redactedHashes.mapNotNull { (media, redactedSha1) ->
+            getValidCacheEntry(media)?.copy(redactedSha1 = redactedSha1)
+        }
+        if (entities.isEmpty()) {
+            return
+        }
+
+        dao.insertOrReplace(entities)
+        entities.associateByTo(cache, LocalMediaHashDbEntity::mediaId)
+
+        log.debug {
+            "saveRedacted(): saved:" +
                     "\nhashes=${entities.size}"
         }
     }

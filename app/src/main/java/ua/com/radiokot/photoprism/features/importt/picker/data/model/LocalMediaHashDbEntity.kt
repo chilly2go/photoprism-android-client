@@ -23,4 +23,11 @@ data class LocalMediaHashDbEntity(
     val isOriginal: Boolean,
     @ColumnInfo(name = "sha1")
     val sha1: String,
+    /**
+     * SHA-1 of the file read without asking for the original, once calculated:
+     * Android zeroes the location data then, keeping the size.
+     * Equals [sha1] if there is nothing to redact.
+     */
+    @ColumnInfo(name = "redacted_sha1", defaultValue = "NULL")
+    val redactedSha1: String? = null,
 )

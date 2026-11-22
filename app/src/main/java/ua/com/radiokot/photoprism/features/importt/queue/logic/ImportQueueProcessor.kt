@@ -296,7 +296,7 @@ class ImportQueueProcessor(
 
         val itemWithHash = item.copy(sha1 = sha1)
 
-        if (isInLibrary(sha1) == true) {
+        if (isInLibrary(sha1) == true || isRedactedCopyInLibrary(item, readableUri, sha1)) {
             alreadyInLibrary()
             return itemWithHash.copy(
                 state = ImportQueueItemState.ALREADY_IN_LIBRARY.name,
@@ -645,6 +645,64 @@ class ImportQueueProcessor(
             log.warn(error) { "isInLibrary(): check_failed" }
             null
         }
+
+    /**
+     * Android zeroes the location data when a file is read without asking for the original,
+     * keeping the size. The upstream app and sharing uploaded such copies.
+     * Their hash differs from the original, which would be uploaded again as a duplicate.
+     *
+     * @param readableUri the URI the [sha1] is calculated from
+     *
+     * @return true if the [item] is an image read as the original
+     * and its copy with the location data redacted is in the library.
+     */
+    private fun isRedactedCopyInLibrary(
+        item: ImportQueueItemDbEntity,
+        readableUri: Uri,
+        sha1: String,
+    ): Boolean {
+        if (readableUri.getQueryParameter(REQUIRE_ORIGINAL_PARAMETER) == null
+            || item.mimeType?.startsWith("image/") != true
+        ) {
+            return false
+        }
+
+        val redactedUri = readableUri.buildUpon()
+            .clearQuery()
+            .apply {
+                readableUri.queryParameterNames
+                    .filter { it != REQUIRE_ORIGINAL_PARAMETER }
+                    .forEach { name ->
+                        readableUri.getQueryParameters(name).forEach { value ->
+                            appendQueryParameter(name, value)
+                        }
+                    }
+            }
+            .build()
+
+        val redactedSha1 = try {
+            calculateSha1(redactedUri)
+        } catch (error: Exception) {
+            if (isStopped()) {
+                throw error
+            }
+            log.debug {
+                "isRedactedCopyInLibrary(): failed_reading_redacted:" +
+                        "\nitem=${item.displayName}," +
+                        "\nerror=$error"
+            }
+            return false
+        }
+
+        return (redactedSha1 != sha1 && isInLibrary(redactedSha1) == true).also { isFound ->
+            if (isFound) {
+                log.debug {
+                    "isRedactedCopyInLibrary(): found_redacted_copy:" +
+                            "\nitem=${item.displayName}"
+                }
+            }
+        }
+    }
 
     private fun isLibraryResponding(sha1: String): Boolean =
         try {

@@ -285,7 +285,11 @@ class LocalMediaPickerViewModel(
                 return
             }
 
-            val missing = hashes.filterValues { it != null && it !in hashesInLibrary }.keys
+            val notFound = hashes.filterValues { it != null && it !in hashesInLibrary }.keys
+            val missing = notFound - findRedactedCopiesInLibrary(
+                media = notFound,
+                hashExecutor = hashExecutor,
+            )
             if (missing.isNotEmpty()) {
                 synchronized(lock) {
                     missing.forEach { statusById[it.id] = Status.MISSING }
@@ -366,13 +370,22 @@ class LocalMediaPickerViewModel(
             else
                 getHashesInLibraryWithRetries(hashes.values.filterNotNull().toSet())
 
+        val redactedCopiesInLibrary: Set<LocalMedia> =
+            if (hashesInLibrary == null || isCleared)
+                emptySet()
+            else
+                findRedactedCopiesInLibrary(
+                    media = hashes.filterValues { it != null && it !in hashesInLibrary }.keys,
+                    hashExecutor = hashExecutor,
+                )
+
         synchronized(lock) {
             hashes.forEach { (media, sha1) ->
                 statusById[media.id] = when {
                     sha1 == null || hashesInLibrary == null ->
                         Status.NOT_CHECKED
 
-                    sha1 in hashesInLibrary ->
+                    sha1 in hashesInLibrary || media in redactedCopiesInLibrary ->
                         Status.IN_LIBRARY
 
                     else ->
@@ -382,6 +395,82 @@ class LocalMediaPickerViewModel(
         }
 
         return hashesInLibrary != null || isLibraryUnavailable
+    }
+
+    /**
+     * Android zeroes the location data when a file is read without asking for the original,
+     * keeping the size. The upstream app and sharing uploaded such copies.
+     * Their hash differs from the original, which would be uploaded again as a duplicate,
+     * so the images are also looked for by the hash of their redacted contents.
+     *
+     * @return the [media] whose redacted copy is in the library,
+     * which is also remembered for their original hash.
+     */
+    private fun findRedactedCopiesInLibrary(
+        media: Collection<LocalMedia>,
+        hashExecutor: ExecutorService,
+    ): Set<LocalMedia> {
+        val candidates = media.filter { item ->
+            !item.isVideo && item.isOriginal && item.contentUri != item.uri
+        }
+        if (candidates.isEmpty() || isLibraryUnavailable) {
+            return emptySet()
+        }
+
+        val newRedactedHashes = mutableMapOf<LocalMedia, String>()
+        val redactedHashes: Map<LocalMedia, String> = hashExecutor
+            .invokeAll(candidates.map { item ->
+                Callable {
+                    item to (hasher.getCachedRedacted(item)
+                        ?: try {
+                            hasher.calculate(
+                                media = item,
+                                uri = item.uri,
+                                isCancelled = { isCleared || isReloadRequested },
+                            ).also { sha1 ->
+                                synchronized(newRedactedHashes) { newRedactedHashes[item] = sha1 }
+                            }
+                        } catch (error: Exception) {
+                            if (!isCleared) {
+                                log.warn(error) {
+                                    "findRedactedCopiesInLibrary(): hashing_failed:" +
+                                            "\nmedia=${item.displayName}"
+                                }
+                            }
+                            null
+                        })
+                }
+            })
+            .mapNotNull { future ->
+                val (item, redactedSha1) = future.get()
+                redactedSha1?.let { item to it }
+            }
+            .toMap()
+
+        hasher.saveRedacted(newRedactedHashes)
+
+        val originalHashes = candidates.associateWith(hasher::getCached)
+        // Files without location data read the same either way.
+        val toCheck = redactedHashes.filter { (item, redactedSha1) ->
+            redactedSha1 != originalHashes[item]
+        }
+        if (toCheck.isEmpty() || isCleared) {
+            return emptySet()
+        }
+
+        val inLibrary = getHashesInLibraryWithRetries(toCheck.values.toSet())
+            ?: return emptySet()
+        val found = toCheck.filterValues(inLibrary::contains).keys
+        libraryHashChecker.remember(found.mapNotNull(originalHashes::get))
+
+        log.debug {
+            "findRedactedCopiesInLibrary(): checked:" +
+                    "\ncandidates=${candidates.size}," +
+                    "\nredacted=${toCheck.size}," +
+                    "\nfound=${found.size}"
+        }
+
+        return found
     }
 
     private fun getHashesInLibraryWithRetries(hashes: Set<String>): Set<String>? {
