@@ -1,6 +1,9 @@
 package ua.com.radiokot.photoprism.features.importt.picker.logic
 
 import android.content.ContentResolver
+import android.os.Build
+import androidx.annotation.RequiresApi
+import ua.com.radiokot.photoprism.features.importt.logic.RedactedImageHasher
 import ua.com.radiokot.photoprism.db.AppDatabase
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.importt.picker.data.model.LocalMedia
@@ -26,13 +29,23 @@ class LocalMediaHasher(
 
     @Synchronized
     fun getCached(media: LocalMedia): String? =
+        getValidCacheEntry(media)?.sha1
+
+    /**
+     * @return cached hash of the [media] read with the location data redacted,
+     * see [LocalMediaHashDbEntity.redactedSha1].
+     */
+    @Synchronized
+    fun getCachedRedacted(media: LocalMedia): String? =
+        getValidCacheEntry(media)?.redactedSha1
+
+    private fun getValidCacheEntry(media: LocalMedia): LocalMediaHashDbEntity? =
         cache[media.id]
             ?.takeIf {
                 it.size == media.size
                         && it.dateModified == media.dateModified
                         && it.isOriginal == media.isOriginal
             }
-            ?.sha1
 
     /**
      * Calculates the hash of the [media] contents.
@@ -63,6 +76,26 @@ class LocalMediaHasher(
 
         return digest.digest().joinToString(separator = "") { "%02x".format(it) }
     }
+
+    /**
+     * Calculates the hash of the [media] contents with the location data redacted,
+     * see [RedactedImageHasher].
+     * Call [saveRedacted] to cache the results.
+     *
+     * @return the hash, or [originalSha1] if there is nothing to redact
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    @Throws(IOException::class)
+    fun calculateRedacted(
+        media: LocalMedia,
+        originalSha1: String,
+        isCancelled: () -> Boolean = { false },
+    ): String =
+        RedactedImageHasher.calculate(
+            contentResolver = contentResolver,
+            uri = media.contentUri,
+            isCancelled = isCancelled,
+        ) ?: originalSha1
 
     /**
      * Forgets the hashes of the media which is not on the device anymore.
@@ -105,6 +138,28 @@ class LocalMediaHasher(
 
         log.debug {
             "save(): saved:" +
+                    "\nhashes=${entities.size}"
+        }
+    }
+
+    /**
+     * Caches the hashes of the redacted contents of the media
+     * whose hashes are already cached by [save].
+     */
+    @Synchronized
+    fun saveRedacted(redactedHashes: Map<LocalMedia, String>) {
+        val entities = redactedHashes.mapNotNull { (media, redactedSha1) ->
+            getValidCacheEntry(media)?.copy(redactedSha1 = redactedSha1)
+        }
+        if (entities.isEmpty()) {
+            return
+        }
+
+        dao.insertOrReplace(entities)
+        entities.associateByTo(cache, LocalMediaHashDbEntity::mediaId)
+
+        log.debug {
+            "saveRedacted(): saved:" +
                     "\nhashes=${entities.size}"
         }
     }

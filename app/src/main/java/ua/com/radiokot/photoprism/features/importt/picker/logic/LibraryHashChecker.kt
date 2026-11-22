@@ -77,6 +77,16 @@ class LibraryHashChecker(
         }
     }
 
+    /**
+     * Remembers that the files with the [sha1s] are in the library,
+     * for example, when another copy of them was found there.
+     */
+    fun remember(sha1s: Collection<String>) =
+        libraryHashesRepository.remember(
+            libraryRootUrl = libraryRootUrl,
+            sha1s = sha1s,
+        )
+
     private enum class SearchPass(
         val archived: Boolean? = null,
         val hidden: Boolean? = null,
