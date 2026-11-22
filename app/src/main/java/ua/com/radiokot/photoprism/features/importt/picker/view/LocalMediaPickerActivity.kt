@@ -1,8 +1,12 @@
 package ua.com.radiokot.photoprism.features.importt.picker.view
 
+import android.Manifest
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.Menu
@@ -67,6 +71,33 @@ class LocalMediaPickerActivity : BaseActivity() {
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { viewModel.onPermissionsChecked() }
 
+    /**
+     * Asks for the location access once more,
+     * or opens the app settings if the system won't ask anymore.
+     */
+    private val locationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { isGranted ->
+        if (!isGranted
+            && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+            && !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_MEDIA_LOCATION)
+        ) {
+            startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", packageName, null),
+                )
+            )
+        }
+        viewModel.onPermissionsChecked()
+    }
+
+    /**
+     * ID of the media the drag selection started from.
+     * Positions can't be used, as the list may change while dragging.
+     */
+    private var dragStartMediaId: Long? = null
+
     private val systemPickerLauncher = registerForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(),
         this::onSystemPickerResult,
@@ -114,14 +145,27 @@ class LocalMediaPickerActivity : BaseActivity() {
             recyclerView = view.mediaRecyclerView,
             onRangeChanged = { startPosition, endPosition ->
                 val list = adapter.currentList
-                val range = minOf(startPosition, endPosition)..maxOf(startPosition, endPosition)
+                val startMediaId = dragStartMediaId
+                    ?: (list.getOrNull(startPosition) as? ListItem.Media)?.item?.media?.id
+                        ?.also { dragStartMediaId = it }
+                // Find where the start is now, the list may have changed.
+                val startIndex = startMediaId
+                    ?.let { id ->
+                        list.indexOfFirst { (it as? ListItem.Media)?.item?.media?.id == id }
+                    }
+                    ?.takeIf { it >= 0 }
+                    ?: startPosition
+                val range = minOf(startIndex, endPosition)..maxOf(startIndex, endPosition)
                 viewModel.onDragSelectionChanged(
                     range.mapNotNull { position ->
                         (list.getOrNull(position) as? ListItem.Media)?.item?.media?.id
                     }
                 )
             },
-            onEnded = viewModel::onDragSelectionEnded,
+            onEnded = {
+                dragStartMediaId = null
+                viewModel.onDragSelectionEnded()
+            },
         )
         view.mediaRecyclerView.addOnItemTouchListener(dragSelectListener)
 
@@ -187,10 +231,8 @@ class LocalMediaPickerActivity : BaseActivity() {
 
             view.progressIndicator.max = progress.total.coerceAtLeast(1)
             view.progressIndicator.setProgressCompat(progress.checked, true)
+            updateNotice()
             view.statusTextView.text = when {
-                progress.isLibraryUnavailable ->
-                    getString(R.string.local_media_picker_library_unavailable)
-
                 !progress.isDone ->
                     getString(
                         R.string.template_local_media_picker_checking,
@@ -215,6 +257,42 @@ class LocalMediaPickerActivity : BaseActivity() {
         viewModel.isPermissionMissing.observe(this) {
             updateEmptyState()
         }
+
+        viewModel.isLocationAccessMissing.observe(this) {
+            updateNotice()
+        }
+    }
+
+    private fun updateNotice() {
+        val isLocationAccessMissing = viewModel.isLocationAccessMissing.value == true
+                && viewModel.isPermissionMissing.value != true
+        val isLibraryUnavailable = viewModel.checkProgress.value?.isLibraryUnavailable == true
+
+        view.noticeLayout.isVisible = isLocationAccessMissing || isLibraryUnavailable
+        when {
+            isLocationAccessMissing -> {
+                view.noticeTextView.setText(R.string.local_media_picker_location_missing)
+                view.noticeButton.setText(R.string.local_media_picker_allow)
+                view.noticeButton.setOnClickListener {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_MEDIA_LOCATION)
+                    }
+                }
+            }
+
+            isLibraryUnavailable -> {
+                view.noticeTextView.setText(R.string.local_media_picker_library_unavailable)
+                view.noticeButton.setText(R.string.local_media_picker_check_again)
+                view.noticeButton.setOnClickListener {
+                    viewModel.onCheckAgainClicked()
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.onScreenResumed()
     }
 
     /**

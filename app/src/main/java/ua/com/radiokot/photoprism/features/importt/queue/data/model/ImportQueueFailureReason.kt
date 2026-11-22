@@ -30,5 +30,15 @@ enum class ImportQueueFailureReason {
      * for example, because its format is not supported.
      */
     NOT_FOUND_AFTER_IMPORT,
+
+    /**
+     * The account is not allowed to upload to the library (HTTP 401 or 403).
+     */
+    NOT_ALLOWED,
     ;
+
+    companion object {
+        fun fromName(name: String?): ImportQueueFailureReason? =
+            name?.let { values().find { reason -> reason.name == it } }
+    }
 }

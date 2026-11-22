@@ -64,6 +64,42 @@
         </LinearLayout>
     </com.google.android.material.appbar.MaterialToolbar>
 
+    <!-- A problem which makes the picker less useful, with a way to solve it. -->
+    <LinearLayout
+        android:id="@+id/notice_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="8dp"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/import_queue_badge_background"
+        android:backgroundTint="?colorErrorContainer"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingVertical="4dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="4dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/toolbar"
+        tools:visibility="visible">
+
+        <TextView
+            android:id="@+id/notice_text_view"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textAppearance="?textAppearanceBodySmall"
+            android:textColor="?colorOnErrorContainer"
+            tools:text="@string/local_media_picker_location_missing" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/notice_button"
+            style="?borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="?colorOnErrorContainer"
+            tools:text="@string/local_media_picker_allow" />
+    </LinearLayout>
+
     <TextView
         android:id="@+id/status_text_view"
         android:layout_width="match_parent"
@@ -73,7 +109,7 @@
         android:paddingBottom="4dp"
         android:textAppearance="?textAppearanceBodyMedium"
         android:textColor="?colorOnSurfaceVariant"
-        app:layout_constraintTop_toBottomOf="@id/toolbar"
+        app:layout_constraintTop_toBottomOf="@id/notice_layout"
         tools:text="Checking with the library: 1200 of 3187" />
 
     <com.google.android.material.progressindicator.LinearProgressIndicator

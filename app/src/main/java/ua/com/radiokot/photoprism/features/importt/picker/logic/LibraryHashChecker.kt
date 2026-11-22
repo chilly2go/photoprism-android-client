@@ -17,11 +17,10 @@ class LibraryHashChecker(
     private val log = kLogger("LibraryHashChecker")
 
     /**
-     * @return when each file known to be in the library was last seen there, by SHA-1.
-     * These are files found by previous checks or uploaded from this device.
+     * @return what previous checks and uploads from this device found out, by SHA-1.
      */
-    fun getKnownInLibrary(): Map<String, Long> =
-        libraryHashesRepository.getCheckedAtBySha1(libraryRootUrl)
+    fun getKnown(): Map<String, LibraryHashesRepository.Known> =
+        libraryHashesRepository.getKnown(libraryRootUrl)
 
     /**
      * @return the [hashes] which are in the library, with private, archived,

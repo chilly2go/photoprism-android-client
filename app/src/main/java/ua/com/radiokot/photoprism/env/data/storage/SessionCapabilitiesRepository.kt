@@ -64,6 +64,19 @@ class SessionCapabilitiesRepository(
             )
     }
 
+    /**
+     * Forgets the remembered capabilities, for example, when disconnecting,
+     * so the next account doesn't get them.
+     */
+    @Synchronized
+    fun clear() {
+        updateDisposable?.dispose()
+        preferences.edit {
+            remove(preferenceKey)
+        }
+        subject.onNext(SessionCapabilities.ASSUMED)
+    }
+
     private fun readRemembered(): SessionCapabilities =
         try {
             preferences.getString(preferenceKey, null)

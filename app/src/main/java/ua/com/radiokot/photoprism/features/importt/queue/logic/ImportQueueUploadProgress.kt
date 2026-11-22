@@ -12,7 +12,8 @@ class ImportQueueUploadProgress {
     private val subject = BehaviorSubject.createDefault<Map<Long, Int>>(emptyMap())
 
     /**
-     * Upload percent by queue item ID, [UNKNOWN] while the file is being checked.
+     * Upload percent by queue item ID, [CHECKING] while the file is being checked,
+     * [UPLOADING_UNKNOWN_PERCENT] while it is uploaded but its size is unknown.
      */
     val percentsByItemId: Observable<Map<Long, Int>> = subject
 
@@ -31,6 +32,7 @@ class ImportQueueUploadProgress {
     }
 
     companion object {
-        const val UNKNOWN = -1
+        const val CHECKING = -1
+        const val UPLOADING_UNKNOWN_PERCENT = -2
     }
 }

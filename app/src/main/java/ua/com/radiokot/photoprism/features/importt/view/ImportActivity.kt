@@ -58,6 +58,13 @@ class ImportActivity : BaseActivity() {
             return
         }
 
+        if (!viewModel.isUploadAllowed) {
+            Toast.makeText(this, R.string.import_not_allowed, Toast.LENGTH_LONG)
+                .show()
+            finish()
+            return
+        }
+
         view = ActivityImportBinding.inflate(layoutInflater)
         cardContentView = IncludeImportCardContentBinding.bind(view.mainCardView)
         setContentView(view.root)

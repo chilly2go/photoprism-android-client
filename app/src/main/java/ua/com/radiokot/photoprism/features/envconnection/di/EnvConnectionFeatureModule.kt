@@ -87,6 +87,9 @@ val envConnectionFeatureModule = module {
                 ),
                 cookieManager = getOrNull(),
                 memoriesRepository = getOrNull(),
+                importQueueRepository = getOrNull(),
+                libraryHashesRepository = getOrNull(),
+                sessionCapabilitiesRepository = getOrNull(),
                 application = androidApplication(),
             )
         } bind DisconnectFromEnvUseCase::class

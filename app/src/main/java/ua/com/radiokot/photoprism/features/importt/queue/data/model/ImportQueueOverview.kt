@@ -46,6 +46,6 @@ data class ImportQueueOverview(
          * so it can't be removed.
          */
         val isInProgress: Boolean =
-            state == ImportQueueItemState.UPLOADING || state == ImportQueueItemState.UPLOADED
+            state.isInProgress
     }
 }

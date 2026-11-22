@@ -8,11 +8,10 @@ import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.albums.data.model.DestinationAlbum
 import ua.com.radiokot.photoprism.features.importt.model.ImportableFile
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueBatchDbEntity
-import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemDbEntity
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueFailureReason
+import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemDbEntity
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemState
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueOverview
-import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueStateCount
 import java.util.Date
 
 /**
@@ -22,6 +21,7 @@ import java.util.Date
 class ImportQueueRepository(
     private val database: AppDatabase,
     private val jsonObjectMapper: JsonObjectMapper,
+    private val copies: ImportQueueCopies,
 ) {
     private val log = kLogger("ImportQueueRepository")
     private val dao: ImportQueueDbDao
@@ -104,8 +104,7 @@ class ImportQueueRepository(
                     displayName = item.displayName,
                     mimeType = item.mimeType,
                     state = item.itemState,
-                    failureReason = item.failureReason
-                        ?.let { name -> ImportQueueFailureReason.values().find { it.name == name } },
+                    failureReason = ImportQueueFailureReason.fromName(item.failureReason),
                     error = item.error,
                 )
             },
@@ -114,14 +113,15 @@ class ImportQueueRepository(
     fun getNextBatch(libraryRootUrl: String): ImportQueueBatchDbEntity? =
         dao.getNextBatch(libraryRootUrl, ImportQueueItemState.PENDING.name)
 
+    fun getBatch(batchId: Long): ImportQueueBatchDbEntity? =
+        dao.getBatch(batchId)
+
     /**
-     * @return count of finished items to total count of items of the library,
-     * cancelled ones excluded.
+     * @return count of finished items to total count of items of the library.
      */
     fun getProgress(libraryRootUrl: String): Pair<Int, Int> {
         val counts = dao.getLibraryStateCounts(libraryRootUrl)
-            .associate { ImportQueueItemState.valueOf(it.state) to it.count }
-            .minus(ImportQueueItemState.CANCELLED)
+            .associate { ImportQueueItemState.fromName(it.state) to it.count }
         val finished = counts
             .filterKeys(ImportQueueItemState::isFinal)
             .values
@@ -135,8 +135,28 @@ class ImportQueueRepository(
     fun getPendingItems(batchId: Long, limit: Int): List<ImportQueueItemDbEntity> =
         dao.getBatchItemsInState(batchId, ImportQueueItemState.PENDING.name, limit)
 
-    fun hasPendingItems(): Boolean =
-        dao.countItemsInStates(listOf(ImportQueueItemState.PENDING.name)) > 0
+    /**
+     * @return items of the library which have been uploaded
+     * but whose import has not been confirmed, as it was interrupted.
+     */
+    fun getUnfinishedImports(libraryRootUrl: String): List<ImportQueueItemDbEntity> =
+        dao.getLibraryItemsWithUploadToken(
+            libraryRootUrl = libraryRootUrl,
+            states = listOf(ImportQueueItemState.UPLOADED.name),
+        )
+
+    /**
+     * @return whether there is anything to do for a worker.
+     */
+    fun hasWork(): Boolean =
+        dao.countItemsInStates(
+            listOf(
+                ImportQueueItemState.PENDING.name,
+                ImportQueueItemState.UPLOADING.name,
+                ImportQueueItemState.UPLOADED.name,
+                ImportQueueItemState.IMPORTING.name,
+            )
+        ) > 0
 
     fun updateItems(items: List<ImportQueueItemDbEntity>) {
         if (items.isEmpty()) {
@@ -164,16 +184,47 @@ class ImportQueueRepository(
     }
 
     /**
-     * Returns the items which were interrupted while being processed
-     * back to the queue, as their upload must be repeated.
+     * Puts the items which were interrupted while being processed back:
+     * those which were not fully uploaded go back to the queue,
+     * those which were uploaded wait for their import to be finished.
+     *
+     * Must only be called while no worker is processing the queue.
      */
     fun requeueInterruptedItems() {
-        dao.changeStates(
-            fromStates = listOf(
-                ImportQueueItemState.UPLOADING.name,
-                ImportQueueItemState.UPLOADED.name,
-            ),
-            toState = ImportQueueItemState.PENDING.name,
+        database.runInTransaction {
+            dao.changeStatesWithoutUploadToken(
+                fromStates = listOf(
+                    ImportQueueItemState.UPLOADING.name,
+                    ImportQueueItemState.UPLOADED.name,
+                    ImportQueueItemState.IMPORTING.name,
+                ),
+                toState = ImportQueueItemState.PENDING.name,
+            )
+            dao.changeStatesWithUploadToken(
+                fromStates = listOf(
+                    ImportQueueItemState.UPLOADING.name,
+                    ImportQueueItemState.IMPORTING.name,
+                ),
+                toState = ImportQueueItemState.UPLOADED.name,
+            )
+        }
+        notifyChanged()
+    }
+
+    /**
+     * Fails all the items of the library which are waiting to be uploaded,
+     * as the account is not allowed to upload.
+     */
+    fun failPendingItemsAsNotAllowed(
+        libraryRootUrl: String,
+        error: String,
+    ) {
+        dao.failLibraryItemsInState(
+            libraryRootUrl = libraryRootUrl,
+            fromState = ImportQueueItemState.PENDING.name,
+            toState = ImportQueueItemState.FAILED.name,
+            error = error,
+            failureReason = ImportQueueFailureReason.NOT_ALLOWED.name,
         )
         notifyChanged()
     }
@@ -203,6 +254,7 @@ class ImportQueueRepository(
             dao.deleteItemInStates(itemId, REMOVABLE_STATES)
             dao.deleteEmptyBatches()
         }
+        deleteUnneededCopies()
         notifyChanged()
     }
 
@@ -213,24 +265,51 @@ class ImportQueueRepository(
         removeItemsInStates(ImportQueueItemState.PENDING)
 
     /**
-     * Removes the items which are successfully done or cancelled,
-     * keeping the failed ones.
+     * Removes the items which are successfully done, keeping the failed ones.
      */
     fun removeDoneItems() =
         removeItemsInStates(
             ImportQueueItemState.IMPORTED,
             ImportQueueItemState.ALREADY_IN_LIBRARY,
-            ImportQueueItemState.CANCELLED,
         )
 
     fun removeFailedItems() =
         removeItemsInStates(ImportQueueItemState.FAILED)
+
+    /**
+     * Removes everything, for example, when disconnecting from the library.
+     * The worker must be stopped beforehand.
+     */
+    fun clear() {
+        database.runInTransaction {
+            dao.deleteAllItems()
+            dao.deleteAllBatches()
+        }
+        copies.deleteAll()
+        notifyChanged()
+    }
+
+    /**
+     * Deletes the copies of the shared files which are in the library by now
+     * or are not in the queue anymore.
+     * Copies of the failed files are kept to be retried.
+     */
+    fun deleteUnneededCopies() {
+        copies.deleteUnneeded(
+            dao.getContentUrisInStates(
+                ImportQueueItemState.values()
+                    .filterNot { it == ImportQueueItemState.IMPORTED || it == ImportQueueItemState.ALREADY_IN_LIBRARY }
+                    .map(ImportQueueItemState::name)
+            )
+        )
+    }
 
     private fun removeItemsInStates(vararg states: ImportQueueItemState) {
         database.runInTransaction {
             dao.deleteItemsInStates(states.map(ImportQueueItemState::name))
             dao.deleteEmptyBatches()
         }
+        deleteUnneededCopies()
         notifyChanged()
     }
 
@@ -242,7 +321,7 @@ class ImportQueueRepository(
 
     private companion object {
         private val REMOVABLE_STATES = ImportQueueItemState.values()
-            .filterNot { it == ImportQueueItemState.UPLOADING || it == ImportQueueItemState.UPLOADED }
+            .filterNot(ImportQueueItemState::isInProgress)
             .map(ImportQueueItemState::name)
     }
 }

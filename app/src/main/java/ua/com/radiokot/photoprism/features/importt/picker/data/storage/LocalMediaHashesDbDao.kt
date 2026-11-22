@@ -13,4 +13,7 @@ interface LocalMediaHashesDbDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertOrReplace(hashes: List<LocalMediaHashDbEntity>)
+
+    @Query("DELETE FROM local_media_hashes WHERE media_id IN (:mediaIds)")
+    fun delete(mediaIds: List<Long>)
 }

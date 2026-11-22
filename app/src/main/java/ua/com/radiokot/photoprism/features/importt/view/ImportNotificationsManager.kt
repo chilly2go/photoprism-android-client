@@ -139,6 +139,23 @@ class ImportNotificationsManager(
         notify(QUEUE_RESULT_NOTIFICATION_ID, notification)
     }
 
+    fun notifyQueueNotAllowed() {
+        val notification = NotificationCompat.Builder(
+            context,
+            CHANNEL_ID
+        )
+            .setContentTitle(context.getString(R.string.import_queue_notification_not_allowed_title))
+            .setContentText(context.getString(R.string.import_queue_notification_not_allowed_text))
+            .setColor(ContextCompat.getColor(context, R.color.md_theme_light_primary))
+            // White icon is used for Android 5 compatibility.
+            .setSmallIcon(R.drawable.ic_upload_white)
+            .setAutoCancel(true)
+            .setContentIntent(openQueueIntent)
+            .build()
+
+        notify(QUEUE_RESULT_NOTIFICATION_ID, notification)
+    }
+
     private fun notify(id: Int, notification: Notification) {
         ensureChannel()
 

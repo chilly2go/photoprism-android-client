@@ -1,6 +1,9 @@
 package ua.com.radiokot.photoprism.features.importt.queue.logic
 
 import android.content.ContentResolver
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import androidx.core.net.toUri
 import okhttp3.MultipartBody
 import retrofit2.HttpException
@@ -13,8 +16,8 @@ import ua.com.radiokot.photoprism.features.albums.data.model.DestinationAlbum
 import ua.com.radiokot.photoprism.features.importt.model.ImportableFile
 import ua.com.radiokot.photoprism.features.importt.model.ImportableFileRequestBody
 import ua.com.radiokot.photoprism.features.importt.picker.data.storage.LibraryHashesRepository
-import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemDbEntity
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueFailureReason
+import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemDbEntity
 import ua.com.radiokot.photoprism.features.importt.queue.data.model.ImportQueueItemState
 import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueueRepository
 import java.io.IOException
@@ -29,13 +32,19 @@ import java.util.concurrent.atomic.AtomicReference
 /**
  * Uploads the queued files of the library batch by batch.
  *
- * Each batch is processed in chunks. For each file of a chunk, its SHA-1 is calculated
+ * First, imports which were interrupted after the upload are finished,
+ * so their files are not uploaded again.
+ * Then each batch is processed in chunks. For each file of a chunk, its SHA-1 is calculated
  * and the library is checked for it, so files which are already there are not uploaded.
  * The rest is uploaded with a token of the chunk, then the chunk import is started
  * and each uploaded file is checked to be in the library.
  * A failed file doesn't fail the rest.
+ *
  * If the library can't be reached, [LibraryUnreachableException] is thrown
  * and the unfinished files stay in the queue.
+ * If the account is not allowed to upload, [NotAllowedException] is thrown
+ * and the files waiting to be uploaded are failed.
+ * Once stopped, uploads are cut short and the unfinished files stay in the queue.
  *
  * All the work is blocking.
  */
@@ -48,12 +57,13 @@ class ImportQueueProcessor(
     private val libraryHashesRepository: LibraryHashesRepository,
     private val uploadProgress: ImportQueueUploadProgress,
     private val libraryRootUrl: String,
+    private val canReadOriginals: () -> Boolean,
     private val isStopped: () -> Boolean,
     private val onProgress: (Progress) -> Unit,
 ) {
     private val log = kLogger("ImportQueueProcessor")
 
-    private val unreachableError = AtomicReference<LibraryUnreachableException?>(null)
+    private val chunkError = AtomicReference<Exception?>(null)
     private var importedCount = 0
     private var alreadyInLibraryCount = 0
     private var failedCount = 0
@@ -62,6 +72,8 @@ class ImportQueueProcessor(
         val userId = withRetries {
             sessionService.getCurrentSession().user.uid
         }
+
+        finishInterruptedImports(userId)
 
         while (!isStopped()) {
             val batch = repository.getNextBatch(libraryRootUrl)
@@ -104,6 +116,42 @@ class ImportQueueProcessor(
         }
     }
 
+    /**
+     * Finishes imports of the files which were uploaded
+     * but whose import was interrupted, for example, by a lost connection.
+     */
+    private fun finishInterruptedImports(userId: String) {
+        val itemsByUpload = repository.getUnfinishedImports(libraryRootUrl)
+            .groupBy { it.batchId to it.uploadToken!! }
+
+        for ((batchAndToken, items) in itemsByUpload) {
+            if (isStopped()) {
+                return
+            }
+
+            val (batchId, uploadToken) = batchAndToken
+
+            log.debug {
+                "finishInterruptedImports(): finishing:" +
+                        "\nbatchId=$batchId," +
+                        "\nuploadToken=$uploadToken," +
+                        "\nitems=${items.size}"
+            }
+
+            finishImport(
+                items = items,
+                userId = userId,
+                uploadToken = uploadToken,
+                albums = repository.getBatch(batchId)
+                    ?.let(repository::getAlbums)
+                    ?: emptySet(),
+                // If the upload is gone from the server and the files are not in the library,
+                // it is safe to upload them again.
+                isInterrupted = true,
+            )
+        }
+    }
+
     private fun processChunk(
         batchId: Long,
         items: List<ImportQueueItemDbEntity>,
@@ -123,17 +171,17 @@ class ImportQueueProcessor(
         // so the rest of the chunk is seen as waiting.
         // Check and upload the files in parallel.
         val executor = Executors.newFixedThreadPool(MAX_CONCURRENT_UPLOADS)
-        val uploadedItems: List<ImportQueueItemDbEntity>
+        val uploadedItems = mutableListOf<ImportQueueItemDbEntity>()
         try {
-            uploadedItems = executor
+            executor
                 .invokeAll(items.map { item ->
                     Callable {
-                        // Removed or stopped meanwhile.
-                        if (isStopped() || !repository.startItem(item.id)) {
+                        // Removed or stopped meanwhile, or the chunk has already failed.
+                        if (isStopped() || chunkError.get() != null || !repository.startItem(item.id)) {
                             return@Callable null
                         }
 
-                        uploadProgress.set(item.id, ImportQueueUploadProgress.UNKNOWN)
+                        uploadProgress.set(item.id, ImportQueueUploadProgress.CHECKING)
                         try {
                             checkAndUploadItem(
                                 item = item.copy(state = ImportQueueItemState.UPLOADING.name),
@@ -149,69 +197,87 @@ class ImportQueueProcessor(
                                 }
                                 reportProgress(Phase.UPLOADING)
                             }
+                        } catch (error: Exception) {
+                            // The whole chunk is to stop, the item goes back to the queue.
+                            chunkError.compareAndSet(null, error)
+                            repository.updateItems(
+                                listOf(
+                                    item.copy(
+                                        state = ImportQueueItemState.PENDING.name,
+                                        uploadToken = null,
+                                    )
+                                )
+                            )
+                            null
                         } finally {
                             uploadProgress.clear(item.id)
                         }
                     }
                 })
-                .map { future ->
-                    try {
+                // Collect all the results first, so none is lost.
+                .forEach { future ->
+                    val item = try {
                         future.get()
                     } catch (error: ExecutionException) {
-                        throw error.cause ?: error
+                        chunkError.compareAndSet(null, (error.cause as? Exception) ?: error)
+                        null
+                    }
+                    if (item?.itemState == ImportQueueItemState.UPLOADED) {
+                        uploadedItems += item
                     }
                 }
-                .filter { it?.itemState == ImportQueueItemState.UPLOADED }
-                .filterNotNull()
         } finally {
             executor.shutdownNow()
         }
 
-        // Unfinished items of the chunk are put back to the queue by the caller.
-        unreachableError.get()?.also { throw it }
+        val error = chunkError.getAndSet(null)
 
-        if (uploadedItems.isEmpty() || isStopped()) {
-            return
+        if (error is NotAllowedException) {
+            failed()
+            repository.failPendingItemsAsNotAllowed(
+                libraryRootUrl = libraryRootUrl,
+                error = error.message ?: "Not allowed",
+            )
         }
 
-        reportProgress(Phase.IMPORTING)
-
-        val importOutcome = processUpload(
-            userId = userId,
-            uploadToken = uploadToken,
-            albums = albums,
-        )
-
-        log.debug {
-            "processChunk(): upload_processed:" +
-                    "\nuploadToken=$uploadToken," +
-                    "\noutcome=$importOutcome"
+        // The uploaded files are imported even if the rest of the chunk has failed,
+        // unless the library can't be reached or the work is stopped.
+        // Then they keep the upload token and their import is finished next time.
+        if (uploadedItems.isNotEmpty() && !isStopped() && error !is LibraryUnreachableException) {
+            finishImport(
+                items = uploadedItems,
+                userId = userId,
+                uploadToken = uploadToken,
+                albums = albums,
+                isInterrupted = false,
+            )
         }
 
-        confirmImport(
-            items = uploadedItems,
-            outcome = importOutcome,
-        )
-
-        reportProgress(Phase.UPLOADING)
+        if (error != null) {
+            throw error
+        }
     }
 
     /**
      * @return the [item] in its new state: [ImportQueueItemState.ALREADY_IN_LIBRARY],
-     * [ImportQueueItemState.UPLOADED] or [ImportQueueItemState.FAILED].
+     * [ImportQueueItemState.UPLOADED], [ImportQueueItemState.FAILED],
+     * or [ImportQueueItemState.PENDING] if the work has been stopped meanwhile.
      */
     private fun checkAndUploadItem(
         item: ImportQueueItemDbEntity,
         userId: String,
         uploadToken: String,
     ): ImportQueueItemDbEntity {
-        // Once the library is unreachable, don't spend time on the rest of the chunk.
-        unreachableError.get()?.also { throw it }
+        val readableUri = getReadableUri(item)
 
         val sha1 = item.sha1
             ?: try {
-                calculateSha1(item)
+                calculateSha1(readableUri)
             } catch (error: Exception) {
+                if (isStopped()) {
+                    return item.copy(state = ImportQueueItemState.PENDING.name)
+                }
+
                 log.warn(error) {
                     "checkAndUploadItem(): failed_reading_file:" +
                             "\nitem=${item.displayName}"
@@ -235,6 +301,8 @@ class ImportQueueProcessor(
             )
         }
 
+        uploadProgress.set(item.id, ImportQueueUploadProgress.UPLOADING_UNKNOWN_PERCENT)
+
         return try {
             withRetries(times = MAX_UPLOAD_RETRIES) {
                 uploadService.uploadUserFiles(
@@ -245,9 +313,13 @@ class ImportQueueProcessor(
                             name = PhotoPrismUploadService.UPLOAD_FILES_PART_NAME,
                             filename = item.displayName,
                             body = ImportableFileRequestBody(
-                                importableFile = item.toImportableFile(),
+                                importableFile = item.toImportableFile(readableUri),
                                 contentResolver = contentResolver,
                                 onReadingProgress = { bytesRead ->
+                                    // Cut the upload short once stopped.
+                                    if (isStopped()) {
+                                        throw InterruptedIOException("The work is stopped")
+                                    }
                                     reportUploadProgress(item, bytesRead)
                                 },
                             ),
@@ -259,13 +331,22 @@ class ImportQueueProcessor(
             itemWithHash.copy(
                 state = ImportQueueItemState.UPLOADED.name,
                 error = null,
+                uploadToken = uploadToken,
             )
         } catch (error: Exception) {
+            if (isStopped()) {
+                return itemWithHash.copy(state = ImportQueueItemState.PENDING.name)
+            }
+
+            if (error.isNotAllowed()) {
+                throw NotAllowedException(error)
+            }
+
             // The file has just been read for the hash, so an I/O error here
             // is most likely a network one. Unless the library still responds,
             // in which case the problem is with this file.
             if (error.isConnectionError() && !isLibraryResponding(sha1)) {
-                throw markUnreachable(error)
+                throw LibraryUnreachableException(error)
             }
 
             log.warn(error) {
@@ -284,6 +365,44 @@ class ImportQueueProcessor(
                         ImportQueueFailureReason.UPLOAD_FAILED.name,
             )
         }
+    }
+
+    /**
+     * Asks the library to add the uploaded [items] and checks that they are there.
+     *
+     * @param isInterrupted whether this is a retry of an interrupted import,
+     * in which case the files are uploaded again if the upload is gone from the server.
+     */
+    private fun finishImport(
+        items: List<ImportQueueItemDbEntity>,
+        userId: String,
+        uploadToken: String,
+        albums: Set<DestinationAlbum>,
+        isInterrupted: Boolean,
+    ) {
+        val importingItems = items.map { it.copy(state = ImportQueueItemState.IMPORTING.name) }
+        repository.updateItems(importingItems)
+        reportProgress(Phase.IMPORTING)
+
+        val importOutcome = processUpload(
+            userId = userId,
+            uploadToken = uploadToken,
+            albums = albums,
+        )
+
+        log.debug {
+            "finishImport(): upload_processed:" +
+                    "\nuploadToken=$uploadToken," +
+                    "\noutcome=$importOutcome"
+        }
+
+        confirmImport(
+            items = importingItems,
+            outcome = importOutcome,
+            isInterrupted = isInterrupted,
+        )
+
+        reportProgress(Phase.UPLOADING)
     }
 
     private fun processUpload(
@@ -328,13 +447,26 @@ class ImportQueueProcessor(
                     }
 
                     // No staged files means they have already been processed,
-                    // for example, by a previous request which timed out.
-                    HttpURLConnection.HTTP_NOT_FOUND,
+                    // for example, by a previous request which timed out,
+                    // or that they are gone.
+                    HttpURLConnection.HTTP_NOT_FOUND ->
+                        return ImportOutcome.NothingStaged
+
                     in 500..599 ->
                         return ImportOutcome.Unknown
 
+                    HttpURLConnection.HTTP_UNAUTHORIZED,
+                    HttpURLConnection.HTTP_FORBIDDEN ->
+                        return ImportOutcome.Rejected(
+                            message = "Not allowed to add files to the library (HTTP $code)",
+                            reason = ImportQueueFailureReason.NOT_ALLOWED,
+                        )
+
                     else ->
-                        return ImportOutcome.Rejected("Import rejected by the library (HTTP $code)")
+                        return ImportOutcome.Rejected(
+                            message = "Import rejected by the library (HTTP $code)",
+                            reason = ImportQueueFailureReason.IMPORT_REJECTED,
+                        )
                 }
             } catch (error: IOException) {
                 // The connection may be cut by a proxy while the library keeps importing.
@@ -347,6 +479,7 @@ class ImportQueueProcessor(
     private fun confirmImport(
         items: List<ImportQueueItemDbEntity>,
         outcome: ImportOutcome,
+        isInterrupted: Boolean,
     ) {
         val (rounds, delayMs) = when (outcome) {
             ImportOutcome.Done ->
@@ -355,6 +488,14 @@ class ImportQueueProcessor(
             ImportOutcome.Unknown ->
                 CONFIRM_ROUNDS_AFTER_UNKNOWN to CONFIRM_DELAY_AFTER_UNKNOWN_MS
 
+            // After an interruption, the files are likely there already.
+            // Otherwise, the import may have been done by a request which timed out.
+            ImportOutcome.NothingStaged ->
+                if (isInterrupted)
+                    1 to 0L
+                else
+                    CONFIRM_ROUNDS_AFTER_UNKNOWN to CONFIRM_DELAY_AFTER_UNKNOWN_MS
+
             is ImportOutcome.Rejected ->
                 1 to 0L
         }
@@ -362,7 +503,12 @@ class ImportQueueProcessor(
         var unconfirmed = items
         for (round in 1..rounds) {
             val confirmed = unconfirmed.filter { isInLibrary(it.sha1!!) == true }
-            repository.updateItems(confirmed.map { it.copy(state = ImportQueueItemState.IMPORTED.name) })
+            repository.updateItems(confirmed.map {
+                it.copy(
+                    state = ImportQueueItemState.IMPORTED.name,
+                    uploadToken = null,
+                )
+            })
             libraryHashesRepository.remember(
                 libraryRootUrl = libraryRootUrl,
                 sha1s = confirmed.mapNotNull(ImportQueueItemDbEntity::sha1),
@@ -384,22 +530,39 @@ class ImportQueueProcessor(
         }
 
         if (isStopped()) {
-            // The rest will be uploaded again.
+            // The upload token is kept, the import is finished next time.
+            repository.updateItems(unconfirmed.map {
+                it.copy(state = ImportQueueItemState.UPLOADED.name)
+            })
             return
         }
 
-        val error = (outcome as? ImportOutcome.Rejected)?.message
-            ?: "Not found in the library after the import"
-        val failureReason =
-            if (outcome is ImportOutcome.Rejected)
-                ImportQueueFailureReason.IMPORT_REJECTED
-            else
-                ImportQueueFailureReason.NOT_FOUND_AFTER_IMPORT
+        if (isInterrupted && outcome == ImportOutcome.NothingStaged) {
+            // The upload is gone and the files are not in the library,
+            // so they are uploaded again.
+            repository.updateItems(unconfirmed.map {
+                it.copy(
+                    state = ImportQueueItemState.PENDING.name,
+                    uploadToken = null,
+                )
+            })
+            return
+        }
+
+        val (error, failureReason) = when (outcome) {
+            is ImportOutcome.Rejected ->
+                outcome.message to outcome.reason
+
+            else ->
+                "Not found in the library after the import" to
+                        ImportQueueFailureReason.NOT_FOUND_AFTER_IMPORT
+        }
         repository.updateItems(unconfirmed.map {
             it.copy(
                 state = ImportQueueItemState.FAILED.name,
                 error = error,
                 failureReason = failureReason.name,
+                uploadToken = null,
             )
         })
         repeat(unconfirmed.size) { failed() }
@@ -424,7 +587,7 @@ class ImportQueueProcessor(
             }
         } catch (error: Exception) {
             if (error.isConnectionError()) {
-                throw markUnreachable(error)
+                throw LibraryUnreachableException(error)
             }
             log.warn(error) { "isInLibrary(): check_failed" }
             null
@@ -439,12 +602,6 @@ class ImportQueueProcessor(
         } catch (error: Exception) {
             false
         }
-
-    private fun markUnreachable(error: Exception): LibraryUnreachableException {
-        val unreachable = LibraryUnreachableException(error)
-        unreachableError.compareAndSet(null, unreachable)
-        return unreachableError.get()!!
-    }
 
     /**
      * @return true if the error means that the library can't be reached at all,
@@ -465,14 +622,54 @@ class ImportQueueProcessor(
                 cause?.isConnectionError() == true
         }
 
-    private fun calculateSha1(item: ImportQueueItemDbEntity): String {
+    private fun Throwable.isNotAllowed(): Boolean =
+        (this as? HttpException)?.code()
+            .let { it == HttpURLConnection.HTTP_UNAUTHORIZED || it == HttpURLConnection.HTTP_FORBIDDEN }
+
+    /**
+     * @return URI to read the item content from: the original one with the location data
+     * if it is a device media file and the app may read the originals.
+     * The hash is calculated from the same content which is uploaded,
+     * otherwise the library check would be useless.
+     */
+    private fun getReadableUri(item: ImportQueueItemDbEntity): Uri {
+        val uri = item.contentUri.toUri()
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+            || uri.authority != MediaStore.AUTHORITY
+            || uri.getQueryParameter(REQUIRE_ORIGINAL_PARAMETER) != null
+            || !canReadOriginals()
+        ) {
+            return uri
+        }
+
+        val originalUri = MediaStore.setRequireOriginal(uri)
+        return try {
+            contentResolver.openInputStream(originalUri)?.close()
+                ?: return uri
+            originalUri
+        } catch (error: Exception) {
+            // Not allowed for this file, for example, when shared by another app.
+            log.debug {
+                "getReadableUri(): original_not_readable:" +
+                        "\nitem=${item.displayName}," +
+                        "\nerror=$error"
+            }
+            uri
+        }
+    }
+
+    private fun calculateSha1(uri: Uri): String {
         val digest = MessageDigest.getInstance("SHA-1")
-        val input = contentResolver.openInputStream(item.contentUri.toUri())
+        val input = contentResolver.openInputStream(uri)
             ?: throw IOException("Can't open input stream")
 
         input.use {
             val buffer = ByteArray(64 * 1024)
             while (true) {
+                if (isStopped()) {
+                    throw InterruptedIOException("The work is stopped")
+                }
                 val read = input.read(buffer)
                 if (read < 0) {
                     break
@@ -570,8 +767,8 @@ class ImportQueueProcessor(
         failedCount++
     }
 
-    private fun ImportQueueItemDbEntity.toImportableFile() = ImportableFile(
-        contentUri = contentUri,
+    private fun ImportQueueItemDbEntity.toImportableFile(readableUri: Uri) = ImportableFile(
+        contentUri = readableUri.toString(),
         displayName = displayName,
         mimeType = mimeType,
         reportedSize = reportedSize,
@@ -579,6 +776,13 @@ class ImportQueueProcessor(
 
     class LibraryUnreachableException(cause: Throwable) :
         IOException("The library can't be reached: ${cause.message ?: cause.javaClass.simpleName}", cause)
+
+    class NotAllowedException(cause: Throwable) :
+        IOException(
+            "Not allowed to upload to the library: " +
+                    ((cause as? HttpException)?.let { "HTTP ${it.code()}" } ?: cause.javaClass.simpleName),
+            cause
+        )
 
     private sealed interface ImportOutcome {
         object Done : ImportOutcome {
@@ -592,7 +796,18 @@ class ImportQueueProcessor(
             override fun toString() = "Unknown"
         }
 
-        data class Rejected(val message: String) : ImportOutcome
+        /**
+         * The server has no files for the upload token:
+         * they have been imported already or are gone.
+         */
+        object NothingStaged : ImportOutcome {
+            override fun toString() = "NothingStaged"
+        }
+
+        data class Rejected(
+            val message: String,
+            val reason: ImportQueueFailureReason,
+        ) : ImportOutcome
     }
 
     enum class Phase {
@@ -628,5 +843,6 @@ class ImportQueueProcessor(
         private const val CONFIRM_DELAY_AFTER_DONE_MS = 5_000L
         private const val CONFIRM_ROUNDS_AFTER_UNKNOWN = 16
         private const val CONFIRM_DELAY_AFTER_UNKNOWN_MS = 15_000L
+        private const val REQUIRE_ORIGINAL_PARAMETER = "requireOriginal"
     }
 }

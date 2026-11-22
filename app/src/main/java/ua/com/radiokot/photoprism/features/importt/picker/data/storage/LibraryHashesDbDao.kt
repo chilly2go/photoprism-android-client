@@ -14,6 +14,6 @@ interface LibraryHashesDbDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertOrReplace(hashes: List<LibraryHashDbEntity>)
 
-    @Query("DELETE FROM library_hashes WHERE library_root_url=:libraryRootUrl AND sha1 IN (:sha1s)")
-    fun delete(libraryRootUrl: String, sha1s: List<String>)
+    @Query("DELETE FROM library_hashes")
+    fun deleteAll()
 }

@@ -5,7 +5,8 @@ import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.importt.picker.data.model.LibraryHashDbEntity
 
 /**
- * Remembers which files are in the library, so they don't have to be checked each time.
+ * Remembers which files are in the library and which are not,
+ * so they don't have to be checked each time.
  * All the methods are blocking and must be called off the main thread.
  */
 class LibraryHashesRepository(
@@ -16,10 +17,15 @@ class LibraryHashesRepository(
         get() = database.libraryHashes()
 
     /**
-     * @return when each known file of the library was last seen there, by SHA-1.
+     * @return what is known about the files of the library, by SHA-1.
      */
-    fun getCheckedAtBySha1(libraryRootUrl: String): Map<String, Long> =
-        dao.getAll(libraryRootUrl).associate { it.sha1 to it.checkedAtMs }
+    fun getKnown(libraryRootUrl: String): Map<String, Known> =
+        dao.getAll(libraryRootUrl).associate { entity ->
+            entity.sha1 to Known(
+                isInLibrary = entity.isInLibrary,
+                checkedAtMs = entity.checkedAtMs,
+            )
+        }
 
     /**
      * Updates the knowledge with the result of checking the [checked] hashes,
@@ -30,19 +36,21 @@ class LibraryHashesRepository(
         checked: Collection<String>,
         inLibrary: Collection<String>,
     ) {
-        val missing = checked - inLibrary.toSet()
-        database.runInTransaction {
-            remember(libraryRootUrl, inLibrary)
-            // The list is split to stay below the SQLite variable limit.
-            missing.chunked(MAX_SQL_VARIABLES).forEach { chunk ->
-                dao.delete(libraryRootUrl, chunk)
-            }
-        }
+        val inLibrarySet = inLibrary.toSet()
+        val now = System.currentTimeMillis()
+        dao.insertOrReplace(checked.map { sha1 ->
+            LibraryHashDbEntity(
+                libraryRootUrl = libraryRootUrl,
+                sha1 = sha1,
+                checkedAtMs = now,
+                isInLibrary = sha1 in inLibrarySet,
+            )
+        })
 
         log.debug {
             "update(): updated:" +
                     "\nchecked=${checked.size}," +
-                    "\ninLibrary=${inLibrary.size}"
+                    "\ninLibrary=${inLibrarySet.size}"
         }
     }
 
@@ -56,17 +64,21 @@ class LibraryHashesRepository(
         if (sha1s.isEmpty()) {
             return
         }
-        val now = System.currentTimeMillis()
-        dao.insertOrReplace(sha1s.map { sha1 ->
-            LibraryHashDbEntity(
-                libraryRootUrl = libraryRootUrl,
-                sha1 = sha1,
-                checkedAtMs = now,
-            )
-        })
+        update(
+            libraryRootUrl = libraryRootUrl,
+            checked = sha1s,
+            inLibrary = sha1s,
+        )
     }
 
-    private companion object {
-        private const val MAX_SQL_VARIABLES = 500
-    }
+    /**
+     * Forgets everything, for example, when disconnecting from the library.
+     */
+    fun clear() =
+        dao.deleteAll()
+
+    data class Known(
+        val isInLibrary: Boolean,
+        val checkedAtMs: Long,
+    )
 }

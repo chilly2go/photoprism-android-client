@@ -254,7 +254,7 @@
     <string name="template_import_queue_batch_albums">Album: %1$s</string>
     <string name="import_queue_item_pending">Wartet auf den Upload</string>
     <string name="import_queue_item_uploading">Wird gerade hochgeladen</string>
-    <string name="import_queue_item_uploaded">Hochgeladen, wird in die Bibliothek übernommen</string>
+    <string name="import_queue_item_uploaded">Hochgeladen, wartet auf die Übernahme in die Bibliothek</string>
     <string name="import_queue_item_imported">Zur Bibliothek hinzugefügt</string>
     <string name="import_queue_item_already_in_library">War schon in der Bibliothek und wurde nicht erneut hochgeladen</string>
     <string name="import_queue_item_failed">Konnte nicht hinzugefügt werden</string>
@@ -412,4 +412,25 @@
     <string name="local_media_picker_no_media">Keine Fotos oder Videos auf diesem Gerät</string>
     <string name="local_media_picker_permission_missing">Um zu zeigen, welche Fotos noch nicht in der Bibliothek sind, braucht die App Zugriff auf Fotos und Videos</string>
     <string name="local_media_picker_grant_access">Zugriff erlauben</string>
+    <string name="import_not_allowed">Dieses Konto darf nichts in die Bibliothek hochladen</string>
+    <string name="import_queue_notification_not_allowed_title">Hochladen nicht erlaubt</string>
+    <string name="import_queue_notification_not_allowed_text">Die Bibliothek erlaubt diesem Konto keine Uploads. Die wartenden Dateien sind als fehlgeschlagen markiert.</string>
+    <string name="import_queue_reason_not_allowed">Nicht erlaubt</string>
+    <string name="import_queue_reason_not_allowed_details">Die Bibliothek erlaubt diesem Konto keine Uploads. Sobald der Admin der Bibliothek das ändert, lassen sich die Dateien erneut versuchen.</string>
+    <string name="import_queue_item_importing">Wird gerade in die Bibliothek übernommen</string>
+    <string name="import_queue_caption_pending">Wartet</string>
+    <string name="import_queue_caption_checking">Wird geprüft</string>
+    <string name="import_queue_caption_uploading">Lädt hoch</string>
+    <string name="template_import_queue_caption_uploading">Lädt hoch %1$d %%</string>
+    <string name="import_queue_caption_uploaded">Hochgeladen, wartet</string>
+    <string name="import_queue_caption_importing">Wird übernommen</string>
+    <string name="import_queue_caption_imported">Fertig</string>
+    <string name="import_queue_caption_already_in_library">Schon vorhanden</string>
+    <string name="import_queue_caption_failed">Fehler</string>
+    <string name="import_queue_allow_mobile_data">Auch über mobile Daten hochladen</string>
+    <string name="import_queue_status_waiting_for_wifi">Wartet auf WLAN</string>
+    <string name="local_media_picker_location_missing">Ohne Zugriff auf den Aufnahmeort erkennt die App schon hochgeladene Fotos nicht und würde Kopien ohne Standort hochladen. Die Mehrfachauswahl ist aus, bis der Zugriff erlaubt ist.</string>
+    <string name="local_media_picker_allow">Erlauben</string>
+    <string name="local_media_picker_check_again">Erneut prüfen</string>
+    <string name="template_import_queue_status_bar">%1$s · %2$s</string>
 </resources>

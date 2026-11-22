@@ -258,7 +258,7 @@
     <string name="template_import_queue_batch_albums">Album: %1$s</string>
     <string name="import_queue_item_pending">Waiting to be uploaded</string>
     <string name="import_queue_item_uploading">Being uploaded</string>
-    <string name="import_queue_item_uploaded">Uploaded, being added to the library</string>
+    <string name="import_queue_item_uploaded">Uploaded, waiting to be added to the library</string>
     <string name="import_queue_item_imported">Added to the library</string>
     <string name="import_queue_item_already_in_library">Was already in the library, so it wasn\'t uploaded again</string>
     <string name="import_queue_item_failed">Couldn\'t be added</string>
@@ -415,4 +415,25 @@
     <string name="local_media_picker_no_media">No photos or videos on this device</string>
     <string name="local_media_picker_permission_missing">To show which photos are not in the library yet, the app needs access to photos and videos</string>
     <string name="local_media_picker_grant_access">Allow access</string>
+    <string name="import_not_allowed">This account may not upload to the library</string>
+    <string name="import_queue_notification_not_allowed_title">Uploading is not allowed</string>
+    <string name="import_queue_notification_not_allowed_text">The library doesn\'t let this account upload. The waiting files are marked as failed.</string>
+    <string name="import_queue_reason_not_allowed">Not allowed</string>
+    <string name="import_queue_reason_not_allowed_details">The library doesn\'t let this account upload. Once the library admin changes that, the files can be retried.</string>
+    <string name="import_queue_item_importing">Being added to the library</string>
+    <string name="import_queue_caption_pending">Waiting</string>
+    <string name="import_queue_caption_checking">Checking</string>
+    <string name="import_queue_caption_uploading">Uploading</string>
+    <string name="template_import_queue_caption_uploading">Uploading %1$d%%</string>
+    <string name="import_queue_caption_uploaded">Uploaded, waiting</string>
+    <string name="import_queue_caption_importing">Being added</string>
+    <string name="import_queue_caption_imported">Done</string>
+    <string name="import_queue_caption_already_in_library">Already there</string>
+    <string name="import_queue_caption_failed">Failed</string>
+    <string name="import_queue_allow_mobile_data">Also upload over mobile data</string>
+    <string name="import_queue_status_waiting_for_wifi">Waiting for Wi-Fi</string>
+    <string name="local_media_picker_location_missing">Without access to photo locations, the app can\'t recognize photos which are already uploaded and would upload copies without the location. Selecting many at once is off until it is allowed.</string>
+    <string name="local_media_picker_allow">Allow</string>
+    <string name="local_media_picker_check_again">Check again</string>
+    <string name="template_import_queue_status_bar">%1$s · %2$s</string>
 </resources>

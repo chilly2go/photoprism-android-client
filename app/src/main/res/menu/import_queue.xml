@@ -3,6 +3,12 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/allow_mobile_data"
+        android:checkable="true"
+        android:title="@string/import_queue_allow_mobile_data"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/remove_done"
         android:title="@string/import_queue_remove_done"
         app:showAsAction="never" />
