@@ -240,7 +240,10 @@ class LocalMediaPickerViewModel(
                     ?: break
                 if (checkBundle(bundle, hashExecutor)) {
                     failedBundlesInRow = 0
-                } else if (++failedBundlesInRow >= MAX_FAILED_BUNDLES_IN_ROW) {
+                } else if (++failedBundlesInRow >= MAX_FAILED_BUNDLES_IN_ROW
+                    // Nothing more to check, so the failure must be shown.
+                    || getNextBundle() == null
+                ) {
                     log.debug { "checkUnknown(): library_unavailable" }
                     isLibraryUnavailable = true
                 }
