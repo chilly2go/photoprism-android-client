@@ -24,6 +24,7 @@ import ua.com.radiokot.photoprism.features.importt.queue.data.storage.ImportQueu
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.HttpURLConnection
+import ua.com.radiokot.photoprism.features.importt.logic.RedactedImageHasher
 import java.security.MessageDigest
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
@@ -653,7 +654,7 @@ class ImportQueueProcessor(
      *
      * @param readableUri the URI the [sha1] is calculated from
      *
-     * @return true if the [item] is an image read as the original
+     * @return true if the [item] is an image
      * and its copy with the location data redacted is in the library.
      */
     private fun isRedactedCopyInLibrary(
@@ -661,33 +662,24 @@ class ImportQueueProcessor(
         readableUri: Uri,
         sha1: String,
     ): Boolean {
-        if (readableUri.getQueryParameter(REQUIRE_ORIGINAL_PARAMETER) == null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
             || item.mimeType?.startsWith("image/") != true
         ) {
             return false
         }
 
-        val redactedUri = readableUri.buildUpon()
-            .clearQuery()
-            .apply {
-                readableUri.queryParameterNames
-                    .filter { it != REQUIRE_ORIGINAL_PARAMETER }
-                    .forEach { name ->
-                        readableUri.getQueryParameters(name).forEach { value ->
-                            appendQueryParameter(name, value)
-                        }
-                    }
-            }
-            .build()
-
         val redactedSha1 = try {
-            calculateSha1(redactedUri)
+            RedactedImageHasher.calculate(
+                contentResolver = contentResolver,
+                uri = readableUri,
+                isCancelled = isStopped,
+            ) ?: return false
         } catch (error: Exception) {
             if (isStopped()) {
                 throw error
             }
             log.debug {
-                "isRedactedCopyInLibrary(): failed_reading_redacted:" +
+                "isRedactedCopyInLibrary(): failed_reading:" +
                         "\nitem=${item.displayName}," +
                         "\nerror=$error"
             }

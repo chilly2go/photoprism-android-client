@@ -410,10 +410,15 @@ class LocalMediaPickerViewModel(
         media: Collection<LocalMedia>,
         hashExecutor: ExecutorService,
     ): Set<LocalMedia> {
-        val candidates = media.filter { item ->
-            !item.isVideo && item.isOriginal && item.contentUri != item.uri
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || isLibraryUnavailable) {
+            return emptySet()
         }
-        if (candidates.isEmpty() || isLibraryUnavailable) {
+        val originalHashes: Map<LocalMedia, String> = media
+            .filter { item -> !item.isVideo && item.isOriginal }
+            .mapNotNull { item -> hasher.getCached(item)?.let { item to it } }
+            .toMap()
+        val candidates = originalHashes.keys
+        if (candidates.isEmpty()) {
             return emptySet()
         }
 
@@ -423,9 +428,9 @@ class LocalMediaPickerViewModel(
                 Callable {
                     item to (hasher.getCachedRedacted(item)
                         ?: try {
-                            hasher.calculate(
+                            hasher.calculateRedacted(
                                 media = item,
-                                uri = item.uri,
+                                originalSha1 = originalHashes.getValue(item),
                                 isCancelled = { isCleared || isReloadRequested },
                             ).also { sha1 ->
                                 synchronized(newRedactedHashes) { newRedactedHashes[item] = sha1 }
@@ -449,7 +454,6 @@ class LocalMediaPickerViewModel(
 
         hasher.saveRedacted(newRedactedHashes)
 
-        val originalHashes = candidates.associateWith(hasher::getCached)
         // Files without location data read the same either way.
         val toCheck = redactedHashes.filter { (item, redactedSha1) ->
             redactedSha1 != originalHashes[item]

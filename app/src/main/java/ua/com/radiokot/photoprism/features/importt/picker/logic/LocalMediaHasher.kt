@@ -1,7 +1,9 @@
 package ua.com.radiokot.photoprism.features.importt.picker.logic
 
 import android.content.ContentResolver
-import android.net.Uri
+import android.os.Build
+import androidx.annotation.RequiresApi
+import ua.com.radiokot.photoprism.features.importt.logic.RedactedImageHasher
 import ua.com.radiokot.photoprism.db.AppDatabase
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.importt.picker.data.model.LocalMedia
@@ -48,17 +50,14 @@ class LocalMediaHasher(
     /**
      * Calculates the hash of the [media] contents.
      * Call [save] to cache the results.
-     *
-     * @param uri to read from, [LocalMedia.uri] to get the redacted contents
      */
     @Throws(IOException::class)
     fun calculate(
         media: LocalMedia,
-        uri: Uri = media.contentUri,
         isCancelled: () -> Boolean = { false },
     ): String {
         val digest = MessageDigest.getInstance("SHA-1")
-        val input = contentResolver.openInputStream(uri)
+        val input = contentResolver.openInputStream(media.contentUri)
             ?: throw IOException("Can't open input stream")
 
         input.use {
@@ -77,6 +76,26 @@ class LocalMediaHasher(
 
         return digest.digest().joinToString(separator = "") { "%02x".format(it) }
     }
+
+    /**
+     * Calculates the hash of the [media] contents with the location data redacted,
+     * see [RedactedImageHasher].
+     * Call [saveRedacted] to cache the results.
+     *
+     * @return the hash, or [originalSha1] if there is nothing to redact
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    @Throws(IOException::class)
+    fun calculateRedacted(
+        media: LocalMedia,
+        originalSha1: String,
+        isCancelled: () -> Boolean = { false },
+    ): String =
+        RedactedImageHasher.calculate(
+            contentResolver = contentResolver,
+            uri = media.contentUri,
+            isCancelled = isCancelled,
+        ) ?: originalSha1
 
     /**
      * Forgets the hashes of the media which is not on the device anymore.
