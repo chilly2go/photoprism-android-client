@@ -20,6 +20,13 @@ constructor(
      * which can't be trusted.
      */
     val reportedSize: Long?,
+
+    /**
+     * When the file was taken (or modified, if unknown), as known on the device,
+     * in milliseconds since the epoch.
+     * Used to date the photo in the library if the file itself has no date.
+     */
+    val takenAtMs: Long? = null,
 ) {
     init {
         require(reportedSize == null || reportedSize > 0) {

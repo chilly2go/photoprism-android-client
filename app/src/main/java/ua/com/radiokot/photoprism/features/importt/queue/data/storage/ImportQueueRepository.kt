@@ -66,6 +66,7 @@ class ImportQueueRepository(
                         displayName = file.displayName,
                         mimeType = file.mimeType,
                         reportedSize = file.reportedSize,
+                        takenAtMs = file.takenAtMs,
                         sha1 = null,
                         state = ImportQueueItemState.PENDING.name,
                         error = null,

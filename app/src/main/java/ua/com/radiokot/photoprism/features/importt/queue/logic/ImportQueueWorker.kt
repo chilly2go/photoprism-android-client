@@ -19,6 +19,7 @@ import org.koin.core.component.inject
 import org.koin.core.scope.Scope
 import ua.com.radiokot.photoprism.di.DI_SCOPE_SESSION
 import ua.com.radiokot.photoprism.env.data.model.EnvSession
+import ua.com.radiokot.photoprism.env.data.storage.SessionCapabilitiesRepository
 import ua.com.radiokot.photoprism.extension.isSelfPermissionGranted
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.features.albums.data.storage.AlbumsRepository
@@ -93,12 +94,19 @@ class ImportQueueWorker(
             sessionService = sessionScope.get(),
             uploadService = sessionScope.get(),
             filesService = sessionScope.get(),
+            photosService = sessionScope.get(),
             libraryHashesRepository = get(),
             uploadProgress = get(),
             libraryRootUrl = sessionScope.get<EnvSession>().envConnectionParams.rootUrl.toString(),
             canReadOriginals = {
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
                         && applicationContext.isSelfPermissionGranted(Manifest.permission.ACCESS_MEDIA_LOCATION)
+            },
+            // Setting the favorite is exactly the "photos update" permission.
+            canUpdatePhotos = {
+                sessionScope.getOrNull<SessionCapabilitiesRepository>()
+                    ?.current
+                    ?.canSetFavorite != false
             },
             isStopped = ::isStopped,
             onProgress = { progress ->

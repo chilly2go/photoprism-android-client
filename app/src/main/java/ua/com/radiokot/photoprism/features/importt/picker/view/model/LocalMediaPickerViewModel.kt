@@ -704,6 +704,7 @@ class LocalMediaPickerViewModel(
                         displayName = media.displayName,
                         mimeType = media.mimeType,
                         reportedSize = media.size.takeIf { it > 0 },
+                        takenAtMs = media.dateTakenMs.takeIf { it > 0 },
                     )
                 }
         }

@@ -8,6 +8,7 @@ import androidx.core.net.toUri
 import okhttp3.MultipartBody
 import retrofit2.HttpException
 import ua.com.radiokot.photoprism.api.files.service.PhotoPrismFilesService
+import ua.com.radiokot.photoprism.api.photos.service.PhotoPrismPhotosService
 import ua.com.radiokot.photoprism.api.session.service.PhotoPrismSessionService
 import ua.com.radiokot.photoprism.api.upload.model.PhotoPrismUploadOptions
 import ua.com.radiokot.photoprism.api.upload.service.PhotoPrismUploadService
@@ -54,10 +55,12 @@ class ImportQueueProcessor(
     private val sessionService: PhotoPrismSessionService,
     private val uploadService: PhotoPrismUploadService,
     private val filesService: PhotoPrismFilesService,
+    private val photosService: PhotoPrismPhotosService,
     private val libraryHashesRepository: LibraryHashesRepository,
     private val uploadProgress: ImportQueueUploadProgress,
     private val libraryRootUrl: String,
     private val canReadOriginals: () -> Boolean,
+    private val canUpdatePhotos: () -> Boolean,
     private val isStopped: () -> Boolean,
     private val onProgress: (Progress) -> Unit,
 ) {
@@ -514,6 +517,7 @@ class ImportQueueProcessor(
                 sha1s = confirmed.mapNotNull(ImportQueueItemDbEntity::sha1),
             )
             repeat(confirmed.size) { imported() }
+            confirmed.forEach(::setTakenAtIfUnknown)
 
             unconfirmed = unconfirmed - confirmed.toSet()
             if (unconfirmed.isEmpty() || round == rounds || isStopped()) {
@@ -566,6 +570,55 @@ class ImportQueueProcessor(
             )
         })
         repeat(unconfirmed.size) { failed() }
+    }
+
+    /**
+     * Sets the date the file was taken, as known on the device, to its photo
+     * if the library couldn't tell it neither from the file nor from its name.
+     * Otherwise, the library would use the time of the upload.
+     * A failure is only logged, the import is done anyway.
+     */
+    private fun setTakenAtIfUnknown(item: ImportQueueItemDbEntity) {
+        val takenAtMs = item.takenAtMs
+            ?: return
+        val sha1 = item.sha1
+            ?: return
+
+        if (!canUpdatePhotos()) {
+            log.debug {
+                "setTakenAtIfUnknown(): skip_as_not_allowed:" +
+                        "\nitem=${item.displayName}"
+            }
+            return
+        }
+
+        try {
+            val photoUid = filesService.getFile(sha1).photoUid
+                ?: return
+            val takenSrc = photosService.getPhotoDateInfo(photoUid).takenSrc
+            if (!takenSrc.isNullOrEmpty()) {
+                return
+            }
+
+            val update = ImportQueueTakenAt.toPhotoUpdate(takenAtMs)
+            photosService.updatePhoto(
+                photoUid = photoUid,
+                update = update,
+            )
+
+            log.debug {
+                "setTakenAtIfUnknown(): set:" +
+                        "\nitem=${item.displayName}," +
+                        "\nphotoUid=$photoUid," +
+                        "\ntakenAtLocal=${update.takenAtLocal}," +
+                        "\ntimeZone=${update.timeZone}"
+            }
+        } catch (error: Exception) {
+            log.warn(error) {
+                "setTakenAtIfUnknown(): failed:" +
+                        "\nitem=${item.displayName}"
+            }
+        }
     }
 
     /**
@@ -772,6 +825,7 @@ class ImportQueueProcessor(
         displayName = displayName,
         mimeType = mimeType,
         reportedSize = reportedSize,
+        takenAtMs = takenAtMs,
     )
 
     class LibraryUnreachableException(cause: Throwable) :
