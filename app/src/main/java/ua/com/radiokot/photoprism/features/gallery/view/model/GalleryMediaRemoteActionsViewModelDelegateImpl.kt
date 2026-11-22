@@ -110,6 +110,37 @@ class GalleryMediaRemoteActionsViewModelDelegateImpl(
             .autoDispose(this)
     }
 
+    override fun restoreGalleryMedia(
+        mediaUids: Collection<String>,
+        currentMediaRepository: SimpleGalleryMediaRepository,
+        onStarted: () -> Unit,
+    ) {
+        currentMediaRepository
+            .restore(mediaUids)
+            .observeOn(AndroidSchedulers.mainThread())
+            .doOnSubscribe {
+                log.debug {
+                    "restoreGalleryMedia(): start_restoring:" +
+                            "\nitems=${mediaUids.size}"
+                }
+
+                onStarted()
+            }
+            .subscribeBy(
+                onError = { error ->
+                    log.error(error) {
+                        "restoreGalleryMedia(): failed_restoring"
+                    }
+                },
+                onComplete = {
+                    log.debug {
+                        "restoreGalleryMedia(): successfully_restored"
+                    }
+                }
+            )
+            .autoDispose(this)
+    }
+
     override fun addGalleryMediaToAlbum(
         mediaUids: Collection<String>,
         onStarted: () -> Unit,

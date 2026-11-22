@@ -577,7 +577,9 @@ class MediaViewerActivity : BaseActivity() {
             viewModel.areActionsEnabled && viewModel.canRemoveFromAlbum
                     && capabilities.canUpdateAlbums
         menu.findItem(R.id.archive).isVisible =
-            viewModel.areActionsEnabled && capabilities.canArchive
+            viewModel.areActionsEnabled && capabilities.canArchive && !viewModel.isArchive
+        menu.findItem(R.id.restore).isVisible =
+            viewModel.areActionsEnabled && capabilities.canArchive && viewModel.isArchive
         menu.findItem(R.id.delete).isVisible =
             viewModel.areActionsEnabled && capabilities.canDelete
 
@@ -635,6 +637,13 @@ class MediaViewerActivity : BaseActivity() {
 
         R.id.archive -> {
             viewModel.onArchiveClicked(
+                position = view.viewPager.currentItem
+            )
+            true
+        }
+
+        R.id.restore -> {
+            viewModel.onRestoreClicked(
                 position = view.viewPager.currentItem
             )
             true

@@ -50,6 +50,14 @@
         tools:ignore="PrivateResource" />
 
     <item
+        android:id="@+id/restore"
+        android:icon="@drawable/ic_unarchive"
+        android:title="@string/restore_action"
+        app:iconTint="?colorOnSurfaceVariant"
+        app:showAsAction="never"
+        tools:ignore="PrivateResource" />
+
+    <item
         android:id="@+id/delete"
         android:icon="@drawable/ic_delete"
         android:title="@string/delete"

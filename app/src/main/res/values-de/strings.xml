@@ -181,6 +181,8 @@
     <string name="extensions_preferences">Erweiterungen</string>
     <string name="extensions_preferences_summary">Erweiterungen für die Galerie</string>
     <string name="archive_action">Archivieren</string>
+    <string name="restore_action">Wiederherstellen</string>
+    <string name="archive_title">Archiv</string>
     <string name="media_viewer_deleting_confirmation">Dieses Element endgültig löschen?</string>
     <string name="extension_store_preference">@string/extension_catalog</string>
     <string name="extension_store_title">@string/extension_catalog</string>

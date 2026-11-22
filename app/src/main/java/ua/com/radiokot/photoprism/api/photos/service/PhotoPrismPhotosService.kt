@@ -67,6 +67,13 @@ interface PhotoPrismPhotosService {
 
     @kotlin.jvm.Throws(IOException::class)
     @Headers("Accept: application/json")
+    @POST("v1/batch/photos/restore")
+    fun batchRestore(
+        @Body batchPhotoUids: PhotoPrismBatchPhotoUids,
+    ): Any // There must be some non-void return type because of Retrofit assertions.
+
+    @kotlin.jvm.Throws(IOException::class)
+    @Headers("Accept: application/json")
     @GET("v1/photos/{photoUid}")
     fun getPhotoDateInfo(
         @Path("photoUid") photoUid: String,

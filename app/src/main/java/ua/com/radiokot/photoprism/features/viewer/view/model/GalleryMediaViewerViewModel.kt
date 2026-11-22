@@ -365,6 +365,28 @@ class GalleryMediaViewerViewModel(
         )
     }
 
+    /**
+     * Whether the archive is being viewed instead of the library.
+     */
+    val isArchive: Boolean
+        get() = ::galleryMediaRepository.isInitialized && galleryMediaRepository.params.archived
+
+    fun onRestoreClicked(position: Int) {
+        val item = galleryMediaRepository.itemsList.getOrNull(position)
+
+        if (item == null) {
+            log.warn {
+                "onRestoreClicked(): position_out_of_range"
+            }
+            return
+        }
+
+        galleryMediaRemoteActionsViewModel.restoreGalleryMedia(
+            mediaUids = listOf(item.uid),
+            currentMediaRepository = galleryMediaRepository,
+        )
+    }
+
     fun onDeleteClicked(position: Int) {
         val item = galleryMediaRepository.itemsList.getOrNull(position)
 
