@@ -11,6 +11,7 @@ import ua.com.radiokot.photoprism.api.model.PhotoPrismOrder
 import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismBatchPhotoEdit
 import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismBatchPhotoUids
 import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismMergedPhoto
+import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismPhotoDateInfo
 import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismPhotoUpdate
 import java.io.IOException
 
@@ -63,6 +64,13 @@ interface PhotoPrismPhotosService {
     fun batchDelete(
         @Body batchPhotoUids: PhotoPrismBatchPhotoUids,
     ): Any // There must be some non-void return type because of Retrofit assertions.
+
+    @kotlin.jvm.Throws(IOException::class)
+    @Headers("Accept: application/json")
+    @GET("v1/photos/{photoUid}")
+    fun getPhotoDateInfo(
+        @Path("photoUid") photoUid: String,
+    ): PhotoPrismPhotoDateInfo
 
     @kotlin.jvm.Throws(IOException::class)
     @JvmSuppressWildcards

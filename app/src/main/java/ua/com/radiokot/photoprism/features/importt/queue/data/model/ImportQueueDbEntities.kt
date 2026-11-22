@@ -71,6 +71,11 @@ data class ImportQueueItemDbEntity(
      */
     @ColumnInfo("upload_token")
     val uploadToken: String? = null,
+    /**
+     * When the file was taken as known on the device, in milliseconds since the epoch.
+     */
+    @ColumnInfo("taken_at_ms")
+    val takenAtMs: Long? = null,
 ) {
     val itemState: ImportQueueItemState
         get() = ImportQueueItemState.fromName(state)

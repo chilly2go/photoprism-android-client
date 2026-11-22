@@ -1,6 +1,7 @@
 package ua.com.radiokot.photoprism.api.files.service
 
 import retrofit2.http.GET
+import ua.com.radiokot.photoprism.api.files.model.PhotoPrismFileInfo
 import retrofit2.http.Headers
 import retrofit2.http.Path
 import java.io.IOException
@@ -18,5 +19,5 @@ interface PhotoPrismFilesService {
     fun getFile(
         @Path("hash")
         hash: String,
-    ): Any
+    ): PhotoPrismFileInfo
 }
