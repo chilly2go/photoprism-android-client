@@ -438,4 +438,42 @@
     <string name="local_media_picker_allow">Allow</string>
     <string name="local_media_picker_check_again">Check again</string>
     <string name="template_import_queue_status_bar">%1$s · %2$s</string>
+    <string name="people_overview_tab_named">Named</string>
+    <string name="people_overview_tab_new">New</string>
+    <string name="people_overview_no_new_faces">No new faces</string>
+    <plurals name="people_overview_photos">
+        <item quantity="one">1 photo</item>
+        <item quantity="other">%1$d photos</item>
+    </plurals>
+    <plurals name="people_overview_matches">
+        <item quantity="one">1 match</item>
+        <item quantity="other">%1$d matches</item>
+    </plurals>
+    <string name="people_overview_rename">Rename</string>
+    <string name="people_overview_add_to_favorites">Add to favorites</string>
+    <string name="people_overview_remove_from_favorites">Remove from favorites</string>
+    <string name="people_overview_hide">Hide</string>
+    <string name="people_overview_show_photos">Show photos</string>
+    <string name="people_overview_name_hint">Name</string>
+    <string name="people_overview_merge_title">Merge with %1$s?</string>
+    <string name="people_overview_merge_message">%1$s already exists. All faces of %2$s will be assigned to %1$s. This can\'t be undone in the app.</string>
+    <string name="people_overview_merge">Merge</string>
+    <string name="people_overview_who_is_this">Who is this?</string>
+    <string name="people_overview_library_wide_hint">Names are shared by everyone using the library.</string>
+    <string name="people_overview_named_as">Named %1$s</string>
+    <string name="people_overview_renamed_to">Renamed to %1$s</string>
+    <string name="people_overview_merged_into">Merged into %1$s</string>
+    <string name="people_overview_hidden">%1$s hidden</string>
+    <string name="people_overview_face_hidden">Face hidden</string>
+    <string name="people_overview_undo">Undo</string>
+    <string name="people_overview_no_permission">No permission to change this in the library</string>
+    <string name="people_overview_failed_to_save">Failed to save the change</string>
+    <string name="people_overview_read_only">You can only view people in this library</string>
+    <string name="people_overview_show_hidden">Show hidden</string>
+    <string name="people_overview_hide_hidden">Back to visible</string>
+    <string name="people_overview_nothing_hidden">Nothing hidden</string>
+    <string name="people_overview_unhide_title">Show again?</string>
+    <string name="people_overview_unhide">Show again</string>
+    <string name="people_overview_unhidden">%1$s shown again</string>
+    <string name="people_overview_face_unhidden">Face shown again</string>
 </resources>

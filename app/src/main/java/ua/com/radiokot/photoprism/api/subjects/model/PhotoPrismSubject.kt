@@ -18,4 +18,16 @@ constructor(
     val favorite: Boolean,
     @JsonProperty("PhotoCount")
     val photoCount: Int,
+    @JsonProperty("Hidden")
+    val hidden: Boolean? = null,
+    @JsonProperty("Private")
+    val private: Boolean? = null,
+    @JsonProperty("Excluded")
+    val excluded: Boolean? = null,
+    @JsonProperty("FileCount")
+    val fileCount: Int? = null,
+    @JsonProperty("MarkerUID")
+    val markerUid: String? = null,
+    @JsonProperty("Alias")
+    val alias: String? = null,
 )

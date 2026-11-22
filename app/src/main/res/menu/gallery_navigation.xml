@@ -29,6 +29,12 @@
         android:title="@string/calendar" />
 
     <item
+        android:id="@+id/people"
+        android:icon="@drawable/ic_account"
+        android:title="@string/people"
+        android:visible="false" />
+
+    <item
         android:id="@+id/labels"
         android:icon="@drawable/ic_label"
         android:title="@string/labels" />

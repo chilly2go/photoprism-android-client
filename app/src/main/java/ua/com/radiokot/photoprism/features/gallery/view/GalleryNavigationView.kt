@@ -24,6 +24,8 @@ class GalleryNavigationView(
     private val viewModel: GalleryViewModel,
 ) {
     private var closeDrawer: (() -> Unit)? = null
+    private val menus = mutableListOf<Menu>()
+    private var isPeopleVisible = false
     val backPressedCallback: OnBackPressedCallback =
         object : OnBackPressedCallback(false) {
             override fun handleOnBackPressed() {
@@ -80,6 +82,8 @@ class GalleryNavigationView(
         context: Context,
         onItemClicked: () -> Unit = {},
     ) {
+        menus += navigationMenu
+
         fun getClickListener(extraAction: () -> Any) = MenuItem.OnMenuItemClickListener {
             extraAction()
             onItemClicked()
@@ -99,6 +103,10 @@ class GalleryNavigationView(
 
         navigationMenu.findItem(R.id.calendar)
             .setOnMenuItemClickListener(getClickListener(viewModel::onCalendarClicked))
+
+        navigationMenu.findItem(R.id.people)
+            ?.apply { isVisible = isPeopleVisible }
+            ?.setOnMenuItemClickListener(getClickListener(viewModel::onPeopleClicked))
 
         navigationMenu.findItem(R.id.labels)
             .setOnMenuItemClickListener(getClickListener(viewModel::onLabelsClicked))
@@ -128,5 +136,15 @@ class GalleryNavigationView(
 
         navigationMenu.findItem(R.id.preferences)
             .setOnMenuItemClickListener(getClickListener(viewModel::onPreferencesClicked))
+    }
+
+    /**
+     * Shows the people entry only to those who may see people.
+     */
+    fun setPeopleVisible(isVisible: Boolean) {
+        isPeopleVisible = isVisible
+        menus.forEach { menu ->
+            menu.findItem(R.id.people)?.isVisible = isVisible
+        }
     }
 }

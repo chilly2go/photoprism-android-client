@@ -14,4 +14,16 @@ constructor(
     val name: String,
     @JsonProperty("Samples")
     val samples: Int,
+    /**
+     * The marker representing the face, only present when requested with markers.
+     * Naming the face is naming this marker.
+     */
+    @JsonProperty("MarkerUID")
+    val markerUid: String? = null,
+    @JsonProperty("FileUID")
+    val fileUid: String? = null,
+    @JsonProperty("SubjUID")
+    val subjUid: String? = null,
+    @JsonProperty("Hidden")
+    val hidden: Boolean? = null,
 )
