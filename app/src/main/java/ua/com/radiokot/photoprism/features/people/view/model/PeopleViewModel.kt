@@ -56,6 +56,7 @@ class PeopleViewModel(
     val itemsList = MutableLiveData<List<PersonTileListItem>>()
     val mainError = MutableLiveData<Error?>(null)
     val isReadOnly = MutableLiveData(false)
+    val isShowingHidden = MutableLiveData(false)
     val backPressedCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() = onBackPressed()
     }
@@ -171,8 +172,9 @@ class PeopleViewModel(
         }
 
         val searchQuery = currentSearchInput
+        val isShowingHidden = isShowingHidden.value == true
         val people = repository.itemsList
-            .filterNot(Person::isHidden)
+            .filter { it.isHidden == isShowingHidden }
             .let { people ->
                 if (searchQuery != null && selectedTab.value == Tab.NAMED)
                     people.filter { searchPredicate(it, searchQuery) }
@@ -196,9 +198,10 @@ class PeopleViewModel(
 
         mainError.value =
             if (people.isEmpty())
-                when (selectedTab.value!!) {
-                    Tab.NAMED -> Error.NoPeople
-                    Tab.NEW -> Error.NoNewFaces
+                when {
+                    isShowingHidden -> Error.NothingHidden
+                    selectedTab.value == Tab.NAMED -> Error.NoPeople
+                    else -> Error.NoNewFaces
                 }
             else
                 null
@@ -220,6 +223,11 @@ class PeopleViewModel(
         currentRepository.updateIfNotFresh()
     }
 
+    fun onShowHiddenClicked() {
+        isShowingHidden.value = isShowingHidden.value != true
+        postItems()
+    }
+
     fun onRetryClicked() {
         currentRepository.update()
     }
@@ -237,7 +245,9 @@ class PeopleViewModel(
                     "\nperson=$person"
         }
 
-        if (person.isFaceCluster && canEditFaces && person.markerUid != null) {
+        if (person.isHidden && canEditPeople) {
+            eventsSubject.onNext(Event.ConfirmUnhide(person))
+        } else if (person.isFaceCluster && canEditFaces && person.markerUid != null) {
             eventsSubject.onNext(
                 Event.ShowNameFaceDialog(
                     face = person,
@@ -257,6 +267,11 @@ class PeopleViewModel(
         val person = item.source
 
         return when {
+            person.isHidden -> {
+                onItemClicked(item)
+                true
+            }
+
             !person.isFaceCluster && canEditPeople -> {
                 eventsSubject.onNext(Event.ShowPersonActions(person))
                 true
@@ -388,6 +403,24 @@ class PeopleViewModel(
                     if (isHidden) {
                         eventsSubject.onNext(Event.ShowPersonHidden(person))
                     }
+                },
+                onError = ::onWriteFailed,
+            )
+            .autoDispose(this)
+    }
+
+    fun onUnhideConfirmed(person: Person) {
+        val unhide =
+            if (person.isFaceCluster)
+                setFaceHiddenUseCase(faceId = person.id, isHidden = false)
+            else
+                setPersonHiddenUseCase(personUid = person.id, isHidden = false)
+
+        unhide
+            .afterChange()
+            .subscribeBy(
+                onComplete = {
+                    eventsSubject.onNext(Event.ShowUnhidden(person))
                 },
                 onError = ::onWriteFailed,
             )
@@ -561,11 +594,19 @@ class PeopleViewModel(
          * Offer [onUndoHideFaceClicked].
          */
         class ShowFaceHidden(val faceId: String) : Event
+
+        /**
+         * Call [onUnhideConfirmed] if confirmed.
+         */
+        class ConfirmUnhide(val person: Person) : Event
+
+        class ShowUnhidden(val person: Person) : Event
     }
 
     sealed interface Error {
         object LoadingFailed : Error
         object NoPeople : Error
         object NoNewFaces : Error
+        object NothingHidden : Error
     }
 }

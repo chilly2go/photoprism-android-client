@@ -182,6 +182,14 @@ class PeopleActivity : BaseActivity() {
                         )
                     )
 
+                PeopleViewModel.Error.NothingHidden ->
+                    view.errorView.showError(
+                        ErrorView.Error.EmptyView(
+                            context = view.errorView.context,
+                            messageRes = R.string.people_overview_nothing_hidden,
+                        )
+                    )
+
                 PeopleViewModel.Error.NoNewFaces ->
                     view.errorView.showError(
                         ErrorView.Error.EmptyView(
@@ -261,7 +269,7 @@ class PeopleActivity : BaseActivity() {
                     .show()
 
             is PeopleViewModel.Event.ShowPersonHidden ->
-                showSnackbar(
+                showUndoSnackbar(
                     getString(
                         R.string.people_overview_hidden,
                         event.person.name ?: ""
@@ -272,8 +280,25 @@ class PeopleActivity : BaseActivity() {
                     }
                     .show()
 
+            is PeopleViewModel.Event.ConfirmUnhide ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.people_overview_unhide_title)
+                    .setMessage(event.person.name)
+                    .setPositiveButton(R.string.people_overview_unhide) { _, _ ->
+                        viewModel.onUnhideConfirmed(event.person)
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+
+            is PeopleViewModel.Event.ShowUnhidden ->
+                showSnackbar(
+                    event.person.name
+                        ?.let { getString(R.string.people_overview_unhidden, it) }
+                        ?: getString(R.string.people_overview_face_unhidden)
+                ).show()
+
             is PeopleViewModel.Event.ShowFaceHidden ->
-                showSnackbar(R.string.people_overview_face_hidden)
+                showUndoSnackbar(getString(R.string.people_overview_face_hidden))
                     .setAction(R.string.people_overview_undo) {
                         viewModel.onUndoHideFaceClicked(event.faceId)
                     }
@@ -286,6 +311,12 @@ class PeopleActivity : BaseActivity() {
 
     private fun showSnackbar(message: String) =
         Snackbar.make(view.swipeRefreshLayout, message, Snackbar.LENGTH_LONG)
+
+    /**
+     * Long enough to notice and reach the undo.
+     */
+    private fun showUndoSnackbar(message: String) =
+        Snackbar.make(view.swipeRefreshLayout, message, UNDO_SNACKBAR_DURATION_MS)
 
     private fun showPersonActions(person: Person) {
         val actions = listOf(
@@ -411,11 +442,31 @@ class PeopleActivity : BaseActivity() {
             bindToViewModel(viewModel, this@PeopleActivity)
         }
 
+        with(menu.findItem(R.id.show_hidden)) {
+            viewModel.isReadOnly.observe(this@PeopleActivity) { isReadOnly ->
+                isVisible = !isReadOnly
+            }
+            viewModel.isShowingHidden.observe(this@PeopleActivity) { isShowingHidden ->
+                if (isShowingHidden) {
+                    setTitle(R.string.people_overview_hide_hidden)
+                    setIcon(R.drawable.ic_eye_off)
+                } else {
+                    setTitle(R.string.people_overview_show_hidden)
+                    setIcon(R.drawable.ic_eye)
+                }
+            }
+            setOnMenuItemClickListener {
+                viewModel.onShowHiddenClicked()
+                true
+            }
+        }
+
         return super.onCreateOptionsMenu(menu)
     }
 
     companion object {
         private const val FALLBACK_LIST_SIZE = 100
+        private const val UNDO_SNACKBAR_DURATION_MS = 8000
         private const val DEFAULT_SEARCH_CONFIG_EXTRA = "default_search_config"
 
         fun getBundle(

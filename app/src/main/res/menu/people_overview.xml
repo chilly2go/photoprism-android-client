@@ -8,4 +8,10 @@
         app:actionViewClass="androidx.appcompat.widget.SearchView"
         app:iconTint="?colorOnSurfaceVariant"
         app:showAsAction="ifRoom|withText" />
+    <item
+        android:id="@+id/show_hidden"
+        android:icon="@drawable/ic_eye"
+        android:title="@string/people_overview_show_hidden"
+        app:iconTint="?colorOnSurfaceVariant"
+        app:showAsAction="ifRoom" />
 </menu>

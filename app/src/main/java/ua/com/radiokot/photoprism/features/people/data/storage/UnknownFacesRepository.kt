@@ -10,8 +10,8 @@ import ua.com.radiokot.photoprism.features.people.data.model.Person
 import ua.com.radiokot.photoprism.util.PagedCollectionLoader
 
 /**
- * Visible face clusters nobody is assigned to yet, the biggest first,
- * like People > New on the web.
+ * Face clusters nobody is assigned to yet, the biggest first,
+ * like People > New on the web. Hidden ones are included, to be shown on request.
  */
 class UnknownFacesRepository(
     private val photoPrismFacesService: PhotoPrismFacesService,
@@ -29,6 +29,7 @@ class UnknownFacesRepository(
                         markers = true,
                         unknown = true,
                         order = "samples",
+                        hidden = "yes",
                     )
 
                     DataPage(

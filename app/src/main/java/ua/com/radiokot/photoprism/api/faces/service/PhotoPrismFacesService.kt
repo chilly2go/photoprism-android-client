@@ -30,6 +30,11 @@ interface PhotoPrismFacesService {
          */
         @Query("order")
         order: String? = null,
+        /**
+         * "yes" to include hidden faces, which are left out by default.
+         */
+        @Query("hidden")
+        hidden: String? = null,
     ): List<PhotoPrismFace>
 
     @kotlin.jvm.Throws(IOException::class)

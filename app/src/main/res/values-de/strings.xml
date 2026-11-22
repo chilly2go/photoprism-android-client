@@ -466,4 +466,11 @@
     <string name="people_overview_no_permission">Keine Berechtigung, das in der Bibliothek zu ändern</string>
     <string name="people_overview_failed_to_save">Änderung konnte nicht gespeichert werden</string>
     <string name="people_overview_read_only">In dieser Bibliothek kannst du Personen nur ansehen</string>
+    <string name="people_overview_show_hidden">Ausgeblendete zeigen</string>
+    <string name="people_overview_hide_hidden">Zurück zu den sichtbaren</string>
+    <string name="people_overview_nothing_hidden">Nichts ausgeblendet</string>
+    <string name="people_overview_unhide_title">Wieder einblenden?</string>
+    <string name="people_overview_unhide">Einblenden</string>
+    <string name="people_overview_unhidden">%1$s wieder eingeblendet</string>
+    <string name="people_overview_face_unhidden">Gesicht wieder eingeblendet</string>
 </resources>

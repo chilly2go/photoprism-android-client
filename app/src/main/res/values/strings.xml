@@ -469,4 +469,11 @@
     <string name="people_overview_no_permission">No permission to change this in the library</string>
     <string name="people_overview_failed_to_save">Failed to save the change</string>
     <string name="people_overview_read_only">You can only view people in this library</string>
+    <string name="people_overview_show_hidden">Show hidden</string>
+    <string name="people_overview_hide_hidden">Back to visible</string>
+    <string name="people_overview_nothing_hidden">Nothing hidden</string>
+    <string name="people_overview_unhide_title">Show again?</string>
+    <string name="people_overview_unhide">Show again</string>
+    <string name="people_overview_unhidden">%1$s shown again</string>
+    <string name="people_overview_face_unhidden">Face shown again</string>
 </resources>
