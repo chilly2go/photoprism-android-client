@@ -63,7 +63,7 @@
                 android:layout_marginStart="12dp"
                 android:layout_weight="1"
                 android:ellipsize="end"
-                android:maxLines="1"
+                android:maxLines="2"
                 android:textAppearance="?textAppearanceBodyMedium"
                 tools:text="Wird übernommen … · 12 von 40" />
 
