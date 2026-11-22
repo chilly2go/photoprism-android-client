@@ -28,9 +28,6 @@ interface ImportQueueDbDao {
     @Query("SELECT * FROM import_queue_items ORDER BY batch_id, id")
     fun getAllItems(): List<ImportQueueItemDbEntity>
 
-    @Query("SELECT content_uri FROM import_queue_items")
-    fun getAllContentUris(): List<String>
-
     @Query("SELECT content_uri FROM import_queue_items WHERE state IN (:states)")
     fun getContentUrisInStates(states: List<String>): List<String>
 

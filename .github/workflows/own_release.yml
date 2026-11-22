@@ -7,7 +7,7 @@ name: Own release
 on:
   push:
     tags:
-      - "v*"
+      - "v*-own.*"
 
 permissions:
   contents: write
@@ -44,8 +44,25 @@ jobs:
           SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
         run: |
           VERSION_NAME="${GITHUB_REF_NAME#v}"
-          # Must grow with each release for Android to accept the update.
-          VERSION_CODE=$((73000 + GITHUB_RUN_NUMBER))
+          # Must grow with each release for Android to accept the update,
+          # so it comes from the tag, not from the run number,
+          # which starts over if the workflow is recreated:
+          # upstream version code * 1000 + 100 + N of "-own.N".
+          # The 100 keeps it above the codes of the first releases (73000 + run number).
+          OWN_NUMBER="${GITHUB_REF_NAME##*-own.}"
+          UPSTREAM_CODE=$(sed -n 's/^ *versionCode \([0-9][0-9]*\)$/\1/p' app/build.gradle | head -n 1)
+          case "$OWN_NUMBER" in
+            ''|*[!0-9]*)
+              echo "The tag $GITHUB_REF_NAME doesn't end with -own.<number>" >&2
+              exit 1
+              ;;
+          esac
+          if [ -z "$UPSTREAM_CODE" ] || [ "$OWN_NUMBER" -ge 900 ]; then
+            echo "Can't derive the version code: upstream=$UPSTREAM_CODE own=$OWN_NUMBER" >&2
+            exit 1
+          fi
+          VERSION_CODE=$((UPSTREAM_CODE * 1000 + 100 + OWN_NUMBER))
+          echo "Version $VERSION_NAME ($VERSION_CODE)"
           ./gradlew app:assembleReleaseClone --stacktrace \
             -PownVersionName="$VERSION_NAME" \
             -PownVersionCode="$VERSION_CODE"
@@ -71,7 +88,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --notes-file release-notes.md \
-            app/build/outputs/apk/releaseClone/*.apk
+          # A re-run after a partly failed run finds the release already there.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md
+            gh release upload "$GITHUB_REF_NAME" --clobber \
+              app/build/outputs/apk/releaseClone/*.apk
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file release-notes.md \
+              app/build/outputs/apk/releaseClone/*.apk
+          fi

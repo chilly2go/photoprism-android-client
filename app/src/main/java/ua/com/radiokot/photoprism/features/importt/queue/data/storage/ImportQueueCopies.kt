@@ -65,14 +65,16 @@ class ImportQueueCopies(
 
     /**
      * Deletes the copies which are not among the [neededContentUris].
+     * Recent copies are kept, as they may be about to be added to the queue.
      */
     @Synchronized
     fun deleteUnneeded(neededContentUris: Collection<String>) {
         val needed = neededContentUris
             .filter(::isCopy)
             .mapTo(mutableSetOf()) { it.toUri().lastPathSegment }
+        val keepNewerThan = System.currentTimeMillis() - MIN_COPY_AGE_TO_DELETE_MS
         val unneeded = directory.listFiles()
-            ?.filterNot { it.name in needed }
+            ?.filterNot { it.name in needed || it.lastModified() > keepNewerThan }
             ?: return
         unneeded.forEach(File::delete)
 
@@ -91,5 +93,6 @@ class ImportQueueCopies(
 
     private companion object {
         private const val MIN_FREE_SPACE_BYTES = 500L * 1024 * 1024
+        private const val MIN_COPY_AGE_TO_DELETE_MS = 60 * 60 * 1000L
     }
 }
