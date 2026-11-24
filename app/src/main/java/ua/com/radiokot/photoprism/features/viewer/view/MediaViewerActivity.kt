@@ -73,6 +73,8 @@ import ua.com.radiokot.photoprism.features.gallery.view.model.GalleryContentLoad
 import ua.com.radiokot.photoprism.features.gallery.view.model.GalleryMediaDownloadActionsViewModel
 import ua.com.radiokot.photoprism.features.gallery.view.model.GalleryMediaRemoteActionsViewModel
 import ua.com.radiokot.photoprism.features.map.view.MapActivity
+import ua.com.radiokot.photoprism.features.viewer.people.view.PhotoPeopleOverlay
+import ua.com.radiokot.photoprism.features.viewer.people.view.model.PhotoPeopleViewModel
 import ua.com.radiokot.photoprism.features.viewer.slideshow.view.SlideshowActivity
 import ua.com.radiokot.photoprism.features.viewer.view.model.FadeEndLivePhotoViewerPage
 import ua.com.radiokot.photoprism.features.viewer.view.model.GalleryMediaViewerViewModel
@@ -94,6 +96,19 @@ class MediaViewerActivity : BaseActivity() {
     private lateinit var view: ActivityMediaViewerBinding
     private val viewModel: GalleryMediaViewerViewModel by viewModel()
     private val videoPlayerCacheViewModel: VideoPlayerCacheViewModel by viewModel()
+    private val photoPeopleViewModel: PhotoPeopleViewModel by viewModel()
+    private val photoPeopleOverlay: PhotoPeopleOverlay by lazy {
+        PhotoPeopleOverlay(
+            activity = this,
+            viewModel = photoPeopleViewModel,
+            viewPager = view.viewPager,
+            pageAt = { position -> viewerPagesAdapter.adapterItems.getOrNull(position) },
+            rootLayout = view.root,
+            bottomAnchorView = view.buttonsLayout,
+            snackbarView = view.snackbarArea,
+            areControlsVisible = viewModel.areBottomControlsVisible,
+        )
+    }
     private val fileReturnIntentCreator: FileReturnIntentCreator by inject()
     private val sessionCapabilitiesRepository: SessionCapabilitiesRepository? by lazy {
         scope.getOrNull()
@@ -209,6 +224,7 @@ class MediaViewerActivity : BaseActivity() {
         subscribeToEvents()
 
         initButtons()
+        photoPeopleOverlay.init()
         downloadProgressView.init()
         initFullScreenToggle()
         initKeyboardNavigation()
@@ -590,6 +606,8 @@ class MediaViewerActivity : BaseActivity() {
             }
         }
 
+        photoPeopleOverlay.bindMenuItem(menu.findItem(R.id.people_in_photo))
+
         with(menu.findItem(R.id.photos_nearby)) {
             viewModel.canSeePhotosNearby.observe(this@MediaViewerActivity) { canSeePhotosNearby ->
                 isVisible = canSeePhotosNearby && viewModel.areActionsEnabled
@@ -660,6 +678,11 @@ class MediaViewerActivity : BaseActivity() {
             viewModel.onPrivateClicked(
                 position = view.viewPager.currentItem
             )
+            true
+        }
+
+        R.id.people_in_photo -> {
+            viewModel.onPeopleClicked()
             true
         }
 
@@ -975,6 +998,9 @@ class MediaViewerActivity : BaseActivity() {
                         repositoryParams = event.repositoryParams,
                     )
 
+                GalleryMediaViewerViewModel.Event.TogglePeople ->
+                    photoPeopleOverlay.toggle()
+
                 GalleryMediaViewerViewModel.Event.Finish ->
                     finish()
 
@@ -1194,8 +1220,9 @@ class MediaViewerActivity : BaseActivity() {
                     || swipeDirectionDetector.detectedDirection == SwipeDirection.LEFT
                     && !zoomableView.canPanHorizontally(1)
 
-        // Do not allow swipe to dismiss if currently viewing a zoomed photo.
-        if (!isZoomed && swipeToDismissHandler.shouldHandleTouch(event)) {
+        // Do not allow swipe to dismiss if currently viewing a zoomed photo
+        // or placing a face frame.
+        if (!isZoomed && !photoPeopleOverlay.isTouchLocked && swipeToDismissHandler.shouldHandleTouch(event)) {
             if (event.action != MotionEvent.ACTION_MOVE) {
                 // When not dragging, let the system dispatch the event
                 // but send it to the handler in order to prepare it

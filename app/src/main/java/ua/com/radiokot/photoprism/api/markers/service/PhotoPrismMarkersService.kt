@@ -3,9 +3,11 @@ package ua.com.radiokot.photoprism.api.markers.service
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.Headers
+import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import ua.com.radiokot.photoprism.api.markers.model.PhotoPrismMarker
+import ua.com.radiokot.photoprism.api.markers.model.PhotoPrismMarkerCreation
 import ua.com.radiokot.photoprism.api.markers.model.PhotoPrismMarkerUpdate
 import java.io.IOException
 
@@ -31,5 +33,15 @@ interface PhotoPrismMarkersService {
     @DELETE("v1/markers/{uid}/subject")
     fun clearMarkerSubject(
         @Path("uid") uid: String,
+    ): PhotoPrismMarker
+
+    /**
+     * Marks a face the detection missed.
+     */
+    @kotlin.jvm.Throws(IOException::class)
+    @Headers("Accept: application/json")
+    @POST("v1/markers")
+    fun createMarker(
+        @Body creation: PhotoPrismMarkerCreation,
     ): PhotoPrismMarker
 }

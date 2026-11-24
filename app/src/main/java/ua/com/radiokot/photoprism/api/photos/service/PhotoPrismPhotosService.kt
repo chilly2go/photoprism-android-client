@@ -11,6 +11,7 @@ import ua.com.radiokot.photoprism.api.model.PhotoPrismOrder
 import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismBatchPhotoEdit
 import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismBatchPhotoUids
 import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismMergedPhoto
+import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismPhoto
 import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismPhotoDateInfo
 import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismPhotoUpdate
 import java.io.IOException
@@ -97,4 +98,14 @@ interface PhotoPrismPhotosService {
     fun batchEdit(
         @Body edit: PhotoPrismBatchPhotoEdit
     ): Any // There must be some non-void return type because of Retrofit assertions.
+
+    /**
+     * Details of a photo, its files with their markers included.
+     */
+    @kotlin.jvm.Throws(IOException::class)
+    @Headers("Accept: application/json")
+    @GET("v1/photos/{photoUid}")
+    fun getPhoto(
+        @Path("photoUid") photoUid: String,
+    ): PhotoPrismPhoto
 }
