@@ -500,4 +500,50 @@
     <string name="photo_people_marked_not_a_face">Marked as not a face</string>
     <string name="photo_people_face_restored">Face restored</string>
     <string name="photo_people_face_added">%1$s marked</string>
+
+    <!-- Archive and review -->
+    <string name="review_title">Review</string>
+    <string name="review_subtitle">Approve or archive</string>
+    <string name="archive_subtitle">Restore or delete forever</string>
+    <string name="review_empty">Nothing to review</string>
+    <string name="archive_empty">The archive is empty</string>
+    <string name="approve_action">Approve</string>
+    <string name="archive_delete_forever">Delete forever</string>
+    <string name="archive_undo">Undo</string>
+    <plurals name="archive_delete_confirmation_title">
+        <item quantity="one">Delete this photo forever?</item>
+        <item quantity="other">Delete %d photos forever?</item>
+    </plurals>
+    <plurals name="archive_delete_confirmation_message">
+        <item quantity="one">Its files are deleted from the server. This can\'t be undone.</item>
+        <item quantity="other">Their files are deleted from the server. This can\'t be undone.</item>
+    </plurals>
+    <plurals name="archive_restore_confirmation_title">
+        <item quantity="one">Restore this photo?</item>
+        <item quantity="other">Restore %d photos?</item>
+    </plurals>
+    <plurals name="archive_restore_confirmation_message">
+        <item quantity="one">It shows up in the library again.</item>
+        <item quantity="other">They show up in the library again.</item>
+    </plurals>
+    <plurals name="archive_done_archived">
+        <item quantity="one">Moved to the archive</item>
+        <item quantity="other">%d photos moved to the archive</item>
+    </plurals>
+    <plurals name="archive_done_restored">
+        <item quantity="one">Restored to the library</item>
+        <item quantity="other">%d photos restored to the library</item>
+    </plurals>
+    <plurals name="archive_done_approved">
+        <item quantity="one">Approved</item>
+        <item quantity="other">%d photos approved</item>
+    </plurals>
+    <plurals name="archive_done_deleted">
+        <item quantity="one">Deleted forever</item>
+        <item quantity="other">%d photos deleted forever</item>
+    </plurals>
+    <string name="archive_failed_archiving">Couldn\'t move to the archive</string>
+    <string name="archive_failed_restoring">Couldn\'t restore</string>
+    <string name="archive_failed_approving">Couldn\'t approve</string>
+    <string name="archive_failed_deleting">Couldn\'t delete</string>
 </resources>

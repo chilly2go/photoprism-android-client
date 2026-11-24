@@ -22,7 +22,9 @@ import ua.com.radiokot.photoprism.features.gallery.data.storage.GalleryPreferenc
 import ua.com.radiokot.photoprism.features.gallery.data.storage.GalleryPreferencesOnPrefs
 import ua.com.radiokot.photoprism.features.gallery.data.storage.SimpleGalleryMediaRepository
 import ua.com.radiokot.photoprism.features.gallery.logic.AddGalleryMediaToAlbumUseCase
+import ua.com.radiokot.photoprism.features.gallery.logic.ApproveGalleryMediaUseCase
 import ua.com.radiokot.photoprism.features.gallery.logic.ArchiveGalleryMediaUseCase
+import ua.com.radiokot.photoprism.features.gallery.logic.RestoreGalleryMediaUseCase
 import ua.com.radiokot.photoprism.features.gallery.logic.DeleteGalleryMediaUseCase
 import ua.com.radiokot.photoprism.features.gallery.logic.DownloadFileUseCase
 import ua.com.radiokot.photoprism.features.gallery.logic.FileReturnIntentCreator
@@ -143,7 +145,19 @@ val galleryFeatureModule = module {
             )
         } bind GalleryMediaDownloadActionsViewModelDelegate::class
 
-        viewModelOf(::GalleryMediaRemoteActionsViewModelDelegateImpl) bind GalleryMediaRemoteActionsViewModelDelegate::class
+        viewModel {
+            GalleryMediaRemoteActionsViewModelDelegateImpl(
+                archiveGalleryMediaUseCase = get(),
+                restoreGalleryMediaUseCase = get(),
+                approveGalleryMediaUseCase = get(),
+                deleteGalleryMediaUseCase = get(),
+                galleryMediaRepositoryFactory = get(),
+                sessionCapabilitiesRepository = getOrNull(),
+                updateGalleryMediaAttributesUseCase = get(),
+                addGalleryMediaToAlbumUseCase = get(),
+                removeGalleryMediaFromAlbumUseCase = get(),
+            )
+        } bind GalleryMediaRemoteActionsViewModelDelegate::class
 
         viewModel {
             GalleryViewModel(
@@ -163,6 +177,8 @@ val galleryFeatureModule = module {
         viewModelOf(::GallerySingleRepositoryViewModel)
 
         scopedOf(::ArchiveGalleryMediaUseCase)
+        scopedOf(::RestoreGalleryMediaUseCase)
+        scopedOf(::ApproveGalleryMediaUseCase)
         scopedOf(::DeleteGalleryMediaUseCase)
         scopedOf(::AddGalleryMediaToAlbumUseCase)
         scopedOf(::RemoveGalleryMediaFromAlbumUseCase)

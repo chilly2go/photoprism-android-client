@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A count at the end of a navigation entry, filled when it asks for action.
+The frame fills the height of the entry, so the count sits in its middle. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="match_parent">
+
+    <TextView
+        android:id="@+id/navigation_counter"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical|end"
+        android:gravity="center"
+        android:minWidth="24dp"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="2dp"
+        android:textAppearance="?textAppearanceLabelMedium"
+        android:visibility="gone"
+        tools:text="1.090"
+        tools:visibility="visible" />
+</FrameLayout>

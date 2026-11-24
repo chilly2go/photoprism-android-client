@@ -31,6 +31,14 @@ class SessionCapabilitiesRepository(
 
     val capabilities: Observable<SessionCapabilities> = subject.distinctUntilChanged()
 
+    private val countsSubject = BehaviorSubject.createDefault(LibraryCounts.UNKNOWN)
+
+    /**
+     * How many photos are in review and in the archive, as last told by the library.
+     * Unknown until the library is asked.
+     */
+    val counts: Observable<LibraryCounts> = countsSubject.distinctUntilChanged()
+
     /**
      * The latest known capabilities, assumed ones if the library hasn't been asked yet.
      */
@@ -47,10 +55,17 @@ class SessionCapabilitiesRepository(
         }
 
         updateDisposable = Single
-            .fromCallable { SessionCapabilities.fromConfig(configService.getClientConfig()) }
+            .fromCallable { configService.getClientConfig() }
             .subscribeOn(Schedulers.io())
             .subscribeBy(
-                onSuccess = { capabilities ->
+                onSuccess = { config ->
+                    val capabilities = SessionCapabilities.fromConfig(config)
+                    countsSubject.onNext(
+                        LibraryCounts(
+                            review = config.count?.review,
+                            archived = config.count?.archived,
+                        )
+                    )
                     log.debug {
                         "update(): updated:" +
                                 "\ncapabilities=$capabilities"
@@ -75,6 +90,7 @@ class SessionCapabilitiesRepository(
             remove(preferenceKey)
         }
         subject.onNext(SessionCapabilities.ASSUMED)
+        countsSubject.onNext(LibraryCounts.UNKNOWN)
     }
 
     private fun readRemembered(): SessionCapabilities =
@@ -90,4 +106,20 @@ class SessionCapabilitiesRepository(
         preferences.edit {
             putString(preferenceKey, jsonObjectMapper.writeValueAsString(capabilities))
         }
+
+    /**
+     * @param review photos in review, null if unknown
+     * @param archived archived photos, null if unknown
+     */
+    data class LibraryCounts(
+        val review: Int?,
+        val archived: Int?,
+    ) {
+        companion object {
+            val UNKNOWN = LibraryCounts(
+                review = null,
+                archived = null,
+            )
+        }
+    }
 }

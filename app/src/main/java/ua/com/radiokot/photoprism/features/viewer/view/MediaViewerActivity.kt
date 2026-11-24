@@ -72,6 +72,7 @@ import ua.com.radiokot.photoprism.features.gallery.view.model.GalleryContentLoad
 import ua.com.radiokot.photoprism.features.gallery.view.model.GalleryContentLoadingErrorResources
 import ua.com.radiokot.photoprism.features.gallery.view.model.GalleryMediaDownloadActionsViewModel
 import ua.com.radiokot.photoprism.features.gallery.view.model.GalleryMediaRemoteActionsViewModel
+import ua.com.radiokot.photoprism.features.gallery.view.GalleryMediaRemoteActionsFeedbackView
 import ua.com.radiokot.photoprism.features.map.view.MapActivity
 import ua.com.radiokot.photoprism.features.viewer.people.view.PhotoPeopleOverlay
 import ua.com.radiokot.photoprism.features.viewer.people.view.model.PhotoPeopleViewModel
@@ -95,6 +96,12 @@ class MediaViewerActivity : BaseActivity() {
     private val log = kLogger("MMediaViewerActivity")
     private lateinit var view: ActivityMediaViewerBinding
     private val viewModel: GalleryMediaViewerViewModel by viewModel()
+    private val remoteActionsFeedbackView: GalleryMediaRemoteActionsFeedbackView by lazy {
+        GalleryMediaRemoteActionsFeedbackView(
+            viewModel = viewModel,
+            snackbarParent = { view.snackbarArea },
+        )
+    }
     private val videoPlayerCacheViewModel: VideoPlayerCacheViewModel by viewModel()
     private val photoPeopleViewModel: PhotoPeopleViewModel by viewModel()
     private val photoPeopleOverlay: PhotoPeopleOverlay by lazy {
@@ -548,6 +555,7 @@ class MediaViewerActivity : BaseActivity() {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.media_viewer, menu)
 
+        applyScopeToMenu(menu)
         menu.showOverflowItemIcons(isBottomBar = false)
 
         // Keyboard navigation focus workarounds.
@@ -592,10 +600,14 @@ class MediaViewerActivity : BaseActivity() {
         menu.findItem(R.id.remove_from_album).isVisible =
             viewModel.areActionsEnabled && viewModel.canRemoveFromAlbum
                     && capabilities.canUpdateAlbums
+        val isArchive = viewModel.scope == SimpleGalleryMediaRepository.Params.Scope.ARCHIVED
+        val isReview = viewModel.scope == SimpleGalleryMediaRepository.Params.Scope.REVIEW
+        menu.findItem(R.id.approve).isVisible =
+            viewModel.areActionsEnabled && capabilities.canReview && isReview
         menu.findItem(R.id.archive).isVisible =
-            viewModel.areActionsEnabled && capabilities.canArchive && !viewModel.isArchive
+            viewModel.areActionsEnabled && capabilities.canArchive && !isArchive
         menu.findItem(R.id.restore).isVisible =
-            viewModel.areActionsEnabled && capabilities.canArchive && viewModel.isArchive
+            viewModel.areActionsEnabled && capabilities.canArchive && isArchive
         menu.findItem(R.id.delete).isVisible =
             viewModel.areActionsEnabled && capabilities.canDelete
 
@@ -615,6 +627,31 @@ class MediaViewerActivity : BaseActivity() {
         }
 
         return super.onCreateOptionsMenu(menu)
+    }
+
+    /**
+     * In the archive and the review, their own action takes the place of the slideshow.
+     * Must be done before showing the overflow icons.
+     */
+    private fun applyScopeToMenu(menu: Menu) {
+        when (viewModel.scope) {
+            SimpleGalleryMediaRepository.Params.Scope.REVIEW -> {
+                menu.findItem(R.id.approve).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                menu.findItem(R.id.start_slideshow).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+            }
+
+            SimpleGalleryMediaRepository.Params.Scope.ARCHIVED -> {
+                menu.findItem(R.id.restore).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                menu.findItem(R.id.start_slideshow).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+                with(menu.findItem(R.id.delete)) {
+                    setTitle(R.string.archive_delete_forever)
+                    setIcon(R.drawable.ic_delete_forever)
+                }
+            }
+
+            SimpleGalleryMediaRepository.Params.Scope.DEFAULT ->
+                Unit
+        }
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
@@ -662,6 +699,13 @@ class MediaViewerActivity : BaseActivity() {
 
         R.id.restore -> {
             viewModel.onRestoreClicked(
+                position = view.viewPager.currentItem
+            )
+            true
+        }
+
+        R.id.approve -> {
+            viewModel.onApproveClicked(
                 position = view.viewPager.currentItem
             )
             true
@@ -951,9 +995,6 @@ class MediaViewerActivity : BaseActivity() {
                 GalleryMediaRemoteActionsViewModel.Event.OpenAlbumForAddingSelection ->
                     openAddingDestinationAlbumSelection()
 
-                GalleryMediaRemoteActionsViewModel.Event.OpenDeletingConfirmationDialog ->
-                    openDeletingConfirmationDialog()
-
                 is GalleryMediaRemoteActionsViewModel.Event.ShowFloatingAddedToAlbumMessage ->
                     showFloatingMessage(
                         getString(
@@ -961,6 +1002,9 @@ class MediaViewerActivity : BaseActivity() {
                             event.albumTitle,
                         )
                     )
+
+                else ->
+                    remoteActionsFeedbackView.show(event)
             }
 
             log.debug {
@@ -1169,15 +1213,6 @@ class MediaViewerActivity : BaseActivity() {
         )
     }
 
-    private fun openDeletingConfirmationDialog() {
-        MaterialAlertDialogBuilder(this)
-            .setMessage(R.string.media_viewer_deleting_confirmation)
-            .setPositiveButton(R.string.delete) { _, _ ->
-                viewModel.onDeletingGalleryMediaConfirmed()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
 
     private fun openAddingDestinationAlbumSelection() {
         addDestinationAlbumSelectionLauncher.launch(

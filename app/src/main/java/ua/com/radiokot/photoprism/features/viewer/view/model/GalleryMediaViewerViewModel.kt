@@ -366,10 +366,30 @@ class GalleryMediaViewerViewModel(
     }
 
     /**
-     * Whether the archive is being viewed instead of the library.
+     * Which part of the library is being viewed.
      */
-    val isArchive: Boolean
-        get() = ::galleryMediaRepository.isInitialized && galleryMediaRepository.params.archived
+    val scope: SimpleGalleryMediaRepository.Params.Scope
+        get() =
+            if (::galleryMediaRepository.isInitialized)
+                galleryMediaRepository.params.scope
+            else
+                SimpleGalleryMediaRepository.Params.Scope.DEFAULT
+
+    fun onApproveClicked(position: Int) {
+        val item = galleryMediaRepository.itemsList.getOrNull(position)
+
+        if (item == null) {
+            log.warn {
+                "onApproveClicked(): position_out_of_range"
+            }
+            return
+        }
+
+        galleryMediaRemoteActionsViewModel.approveGalleryMedia(
+            mediaUids = listOf(item.uid),
+            currentMediaRepository = galleryMediaRepository,
+        )
+    }
 
     fun onRestoreClicked(position: Int) {
         val item = galleryMediaRepository.itemsList.getOrNull(position)

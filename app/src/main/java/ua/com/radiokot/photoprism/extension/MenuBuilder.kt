@@ -5,6 +5,7 @@ import android.graphics.drawable.InsetDrawable
 import android.os.Build
 import android.view.Menu
 import androidx.appcompat.view.menu.MenuBuilder
+import androidx.appcompat.view.menu.MenuItemImpl
 import ua.com.radiokot.photoprism.R
 
 @SuppressLint("RestrictedApi")
@@ -16,7 +17,8 @@ fun MenuBuilder.showOverflowItemIcons(isBottomBar: Boolean) {
         // Apply horizontal margin for overflow menu item icons for more pleasant look.
         val iconMarginHorizontal =
             context.resources.getDimensionPixelSize(R.dimen.menu_icon_margin_horizontal)
-        visibleItems.forEach { menuItem ->
+        // All the items, as hidden ones may be shown later.
+        (0 until size()).map { getItem(it) as MenuItemImpl }.forEach { menuItem ->
             if ((isBottomBar && !menuItem.requiresActionButton()
                 || !isBottomBar && !menuItem.requestsActionButton())
                 && menuItem.icon !is InsetDrawable

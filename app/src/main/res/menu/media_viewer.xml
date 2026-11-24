@@ -21,6 +21,14 @@
         app:showAsAction="ifRoom" />
 
     <item
+        android:id="@+id/approve"
+        android:icon="@drawable/ic_approve"
+        android:title="@string/approve_action"
+        android:visible="false"
+        app:iconTint="?colorOnSurfaceVariant"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/open_in"
         android:icon="@drawable/ic_open_in"
         android:title="@string/open_with"
