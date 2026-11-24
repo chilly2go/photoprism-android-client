@@ -26,6 +26,13 @@
         app:iconTint="?colorOnSurfaceVariant"
         app:showAsAction="never" />
     <item
+        android:id="@+id/approve"
+        android:icon="@drawable/ic_approve"
+        android:title="@string/approve_action"
+        android:visible="false"
+        app:iconTint="?colorOnSurfaceVariant"
+        app:showAsAction="always" />
+    <item
         android:id="@+id/archive"
         android:icon="@drawable/ic_archive"
         android:title="@string/archive_action"

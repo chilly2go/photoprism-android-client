@@ -50,6 +50,12 @@ interface PhotoPrismPhotosService {
          */
         @Query("error")
         error: Boolean? = null,
+        /**
+         * Only photos in review, those of low quality. Needs the photos delete permission,
+         * otherwise ignored by the server.
+         */
+        @Query("review")
+        review: Boolean? = null,
     ): List<PhotoPrismMergedPhoto>
 
     @kotlin.jvm.Throws(IOException::class)
@@ -70,6 +76,16 @@ interface PhotoPrismPhotosService {
     @Headers("Accept: application/json")
     @POST("v1/batch/photos/restore")
     fun batchRestore(
+        @Body batchPhotoUids: PhotoPrismBatchPhotoUids,
+    ): Any // There must be some non-void return type because of Retrofit assertions.
+
+    /**
+     * Takes the photos out of review. Archived ones are restored too.
+     */
+    @kotlin.jvm.Throws(IOException::class)
+    @Headers("Accept: application/json")
+    @POST("v1/batch/photos/approve")
+    fun batchApprove(
         @Body batchPhotoUids: PhotoPrismBatchPhotoUids,
     ): Any // There must be some non-void return type because of Retrofit assertions.
 

@@ -8,6 +8,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.Menu
+import android.view.MenuItem
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.registerForActivityResult
@@ -72,6 +73,12 @@ class GallerySingleRepositoryActivity : BaseActivity() {
     private val log = kLogger("GallerySingleRepositoryActivity")
     private lateinit var view: ActivityGallerySingleRepositoryBinding
     private val viewModel: GallerySingleRepositoryViewModel by viewModel()
+    private val remoteActionsFeedbackView: GalleryMediaRemoteActionsFeedbackView by lazy {
+        GalleryMediaRemoteActionsFeedbackView(
+            viewModel = viewModel,
+            snackbarParent = { view.galleryRecyclerView },
+        )
+    }
     private val monthYearDateFormat: DateFormat by inject(named(UTC_MONTH_YEAR_DATE_FORMAT))
     private val galleryItemsAdapter = ItemAdapter<GalleryListItem>()
     private lateinit var endlessScrollListener: EndlessRecyclerOnScrollListener
@@ -151,6 +158,16 @@ class GallerySingleRepositoryActivity : BaseActivity() {
         setSupportActionBar(view.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         intent.getStringExtra(TITLE_EXTRA)?.also(::setTitle)
+        when (viewModel.scope) {
+            SimpleGalleryMediaRepository.Params.Scope.ARCHIVED ->
+                supportActionBar?.setSubtitle(R.string.archive_subtitle)
+
+            SimpleGalleryMediaRepository.Params.Scope.REVIEW ->
+                supportActionBar?.setSubtitle(R.string.review_subtitle)
+
+            SimpleGalleryMediaRepository.Params.Scope.DEFAULT ->
+                Unit
+        }
         @Suppress("DEPRECATION")
         (intent.getSerializableExtra(MONTH_TITLE_EXTRA) as? LocalDate)?.also {
             setTitle(monthYearDateFormat.format(it).capitalized())
@@ -225,6 +242,9 @@ class GallerySingleRepositoryActivity : BaseActivity() {
 
                     R.id.restore ->
                         viewModel.onRestoreMultipleSelectionClicked()
+
+                    R.id.approve ->
+                        viewModel.onApproveMultipleSelectionClicked()
 
                     R.id.delete ->
                         viewModel.onDeleteMultipleSelectionClicked()
@@ -314,12 +334,38 @@ class GallerySingleRepositoryActivity : BaseActivity() {
             }
             findItem(R.id.add_to_album).isVisible =
                 areUserSelectionItemsVisible && capabilities.canUpdateAlbums
-            findItem(R.id.archive).isVisible =
-                areUserSelectionItemsVisible && capabilities.canArchive && !viewModel.isArchive
-            findItem(R.id.restore).isVisible =
-                areUserSelectionItemsVisible && capabilities.canArchive && viewModel.isArchive
-            findItem(R.id.delete).isVisible =
-                areUserSelectionItemsVisible && capabilities.canDelete
+            val scope = viewModel.scope
+            val isArchive = scope == SimpleGalleryMediaRepository.Params.Scope.ARCHIVED
+            val isReview = scope == SimpleGalleryMediaRepository.Params.Scope.REVIEW
+            findItem(R.id.approve).isVisible =
+                areUserSelectionItemsVisible && capabilities.canReview && isReview
+            findItem(R.id.archive).apply {
+                isVisible = areUserSelectionItemsVisible && capabilities.canArchive && !isArchive
+                // Next to approving, archiving is what the review is for.
+                setShowAsAction(
+                    if (isReview)
+                        MenuItem.SHOW_AS_ACTION_ALWAYS
+                    else
+                        MenuItem.SHOW_AS_ACTION_NEVER
+                )
+            }
+            findItem(R.id.restore).apply {
+                isVisible = areUserSelectionItemsVisible && capabilities.canArchive && isArchive
+                setShowAsAction(
+                    if (isArchive)
+                        MenuItem.SHOW_AS_ACTION_ALWAYS
+                    else
+                        MenuItem.SHOW_AS_ACTION_NEVER
+                )
+            }
+            findItem(R.id.delete).apply {
+                isVisible = areUserSelectionItemsVisible && capabilities.canDelete
+                if (isArchive) {
+                    setTitle(R.string.archive_delete_forever)
+                    setIcon(R.drawable.ic_delete_forever)
+                    setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                }
+            }
             findItem(R.id.add_to_favorites).isVisible =
                 areUserSelectionItemsVisible && viewModel.canAddSelectedToFavorites
                         && capabilities.canSetFavorite
@@ -636,9 +682,6 @@ class GallerySingleRepositoryActivity : BaseActivity() {
                 GalleryMediaRemoteActionsViewModel.Event.OpenAlbumForAddingSelection ->
                     openAddingDestinationAlbumSelection()
 
-                GalleryMediaRemoteActionsViewModel.Event.OpenDeletingConfirmationDialog ->
-                    openDeletingConfirmationDialog()
-
                 is GalleryMediaRemoteActionsViewModel.Event.ShowFloatingAddedToAlbumMessage ->
                     showFloatingMessage(
                         getString(
@@ -646,6 +689,9 @@ class GallerySingleRepositoryActivity : BaseActivity() {
                             event.albumTitle,
                         )
                     )
+
+                else ->
+                    remoteActionsFeedbackView.show(event)
             }
 
             log.debug {
@@ -755,15 +801,6 @@ class GallerySingleRepositoryActivity : BaseActivity() {
         }
     }
 
-    private fun openDeletingConfirmationDialog() {
-        MaterialAlertDialogBuilder(this)
-            .setMessage(R.string.gallery_deleting_confirmation)
-            .setPositiveButton(R.string.delete) { _, _ ->
-                viewModel.onDeletingGalleryMediaConfirmed()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
 
     private fun returnDownloadedFiles(
         filesToReturn: List<SendableFile>,
@@ -847,7 +884,16 @@ class GallerySingleRepositoryActivity : BaseActivity() {
     private val GallerySingleRepositoryViewModel.Error.localizedMessage: String
         get() = when (this) {
             GallerySingleRepositoryViewModel.Error.NoMediaFound ->
-                getString(R.string.nothing_found)
+                when (viewModel.scope) {
+                    SimpleGalleryMediaRepository.Params.Scope.ARCHIVED ->
+                        getString(R.string.archive_empty)
+
+                    SimpleGalleryMediaRepository.Params.Scope.REVIEW ->
+                        getString(R.string.review_empty)
+
+                    SimpleGalleryMediaRepository.Params.Scope.DEFAULT ->
+                        getString(R.string.nothing_found)
+                }
 
             is GallerySingleRepositoryViewModel.Error.ContentLoadingError ->
                 GalleryContentLoadingErrorResources.getMessage(

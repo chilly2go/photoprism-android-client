@@ -29,6 +29,10 @@ constructor(
     val canEditPhotos: Boolean,
     @JsonProperty("canEditLabels")
     val canEditLabels: Boolean,
+    /**
+     * Seeing what's in review and approving it.
+     * The server only lists the review to those who may delete photos.
+     */
     @JsonProperty("canReview")
     val canReview: Boolean,
     @JsonProperty("canSeePeople")
@@ -111,7 +115,7 @@ constructor(
                         && feature("import"),
                 canEditPhotos = canUpdatePhotos && feature("edit"),
                 canEditLabels = canUpdatePhotos && feature("labels"),
-                canReview = canUpdatePhotos && feature("review"),
+                canReview = canUpdatePhotos && canDeletePhotos && feature("review"),
                 canSeePeople = canSeePeople,
                 canEditPeople = canEditPeople,
                 canEditFaces = canEditPeople && allows("files", "update"),

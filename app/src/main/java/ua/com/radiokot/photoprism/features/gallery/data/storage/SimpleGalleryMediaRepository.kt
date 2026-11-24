@@ -85,7 +85,8 @@ class SimpleGalleryMediaRepository(
                 count = lookaheadLimit,
                 offset = offset,
                 q = params.query,
-                archived = params.archived.takeIf { it },
+                archived = params.archivedQuery,
+                review = params.reviewQuery,
                 order = when (pagingOrder) {
                     PagingOrder.DESC -> PhotoPrismOrder.NEWEST
                     PagingOrder.ASC -> PhotoPrismOrder.OLDEST
@@ -188,7 +189,8 @@ class SimpleGalleryMediaRepository(
                 count = 1,
                 offset = 0,
                 q = params.query,
-                archived = params.archived.takeIf { it },
+                archived = params.archivedQuery,
+                review = params.reviewQuery,
                 order = PhotoPrismOrder.NEWEST
             )
                 .firstOrNull()
@@ -202,7 +204,8 @@ class SimpleGalleryMediaRepository(
                 count = 1,
                 offset = 0,
                 q = params.query,
-                archived = params.archived.takeIf { it },
+                archived = params.archivedQuery,
+                review = params.reviewQuery,
                 order = PhotoPrismOrder.OLDEST
             )
                 .firstOrNull()
@@ -327,7 +330,7 @@ class SimpleGalleryMediaRepository(
         itemUids: Collection<String>
     ): Completable = {
         val uids = PhotoPrismBatchPhotoUids(itemUids)
-        if (!params.archived) {
+        if (params.scope != Params.Scope.ARCHIVED) {
             photoPrismPhotosService.batchArchive(uids)
         }
         photoPrismPhotosService.batchDelete(uids)
@@ -352,8 +355,43 @@ class SimpleGalleryMediaRepository(
             removeLocally(itemUids.toSet())
         }
 
+    /**
+     * Takes the items out of review.
+     * They leave the list only if it is the review.
+     */
+    fun approve(
+        itemUids: Collection<String>
+    ): Completable = {
+        photoPrismPhotosService.batchApprove(PhotoPrismBatchPhotoUids(itemUids))
+    }
+        .toCompletable()
+        .subscribeOn(Schedulers.io())
+        .doOnComplete {
+            if (params.scope == Params.Scope.REVIEW) {
+                removeLocally(itemUids.toSet())
+            }
+        }
+
     fun removeLocally(itemUids: Set<String>) = synchronized(this) {
         mutableItemsList.removeAll { it.uid in itemUids }
+        broadcast()
+    }
+
+    /**
+     * Puts items removed with [removeLocally] back where they were,
+     * for example, when an action is undone.
+     *
+     * @param itemsByIndex the items by their index in [itemsList] before the removal
+     */
+    fun putBackLocally(itemsByIndex: Map<Int, GalleryMedia>) = synchronized(this) {
+        itemsByIndex.entries
+            .sortedBy { it.key }
+            .forEach { (index, item) ->
+                if (mutableItemsList.none { it.uid == item.uid }) {
+                    mutableItemsList.add(index.coerceIn(0, mutableItemsList.size), item)
+                    itemsByUid[item.uid] = item
+                }
+            }
         broadcast()
     }
 
@@ -382,7 +420,7 @@ class SimpleGalleryMediaRepository(
      * to filter out items with any of them.
      * @param pageLimit target limit setting the minimum number of items in the page.
      * The actual pages are bigger due to the PhotoPrism pagination workaround.
-     * @param archived whether to show the archive instead of the library
+     * @param scope which part of the library to show
      */
     @Parcelize
     data class Params(
@@ -392,8 +430,32 @@ class SimpleGalleryMediaRepository(
         val postFilterExcludePersonIds: Set<String> = emptySet(),
         val pageLimit: Int = DEFAULT_PAGE_LIMIT,
         val itemsOrder: GalleryItemsOrder = GalleryItemsOrder.NEWEST_FIRST,
-        val archived: Boolean = false,
+        val scope: Scope = Scope.DEFAULT,
     ) : Parcelable {
+
+        enum class Scope {
+            /**
+             * The library, what's neither archived nor hidden.
+             */
+            DEFAULT,
+
+            /**
+             * Archived items, which can be restored or deleted forever.
+             */
+            ARCHIVED,
+
+            /**
+             * Items of low quality, waiting to be approved or archived.
+             */
+            REVIEW,
+            ;
+        }
+
+        val archivedQuery: Boolean?
+            get() = true.takeIf { scope == Scope.ARCHIVED }
+
+        val reviewQuery: Boolean?
+            get() = true.takeIf { scope == Scope.REVIEW }
 
         constructor(
             searchConfig: SearchConfig,
@@ -459,6 +521,16 @@ class SimpleGalleryMediaRepository(
         fun invalidateAllCached() {
             cache.snapshot().values.onEach(Repository::invalidate)
             weakReferences.values.onEach { it.get()?.invalidate() }
+        }
+
+        /**
+         * Invalidates the cached repositories but the given one.
+         */
+        fun invalidateAllCachedExcept(repository: SimpleGalleryMediaRepository) {
+            (cache.snapshot().values + weakReferences.values.mapNotNull { it.get() })
+                .distinct()
+                .filter { it !== repository }
+                .forEach(Repository::invalidate)
         }
 
         private fun Params.asKey(): String =

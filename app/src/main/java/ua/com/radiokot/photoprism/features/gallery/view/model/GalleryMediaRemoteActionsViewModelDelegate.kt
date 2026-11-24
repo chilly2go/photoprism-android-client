@@ -16,7 +16,19 @@ interface GalleryMediaRemoteActionsViewModelDelegate : GalleryMediaRemoteActions
         onStarted: () -> Unit = {},
     )
 
+    /**
+     * Brings archived items back to the library once confirmed.
+     */
     fun restoreGalleryMedia(
+        mediaUids: Collection<String>,
+        currentMediaRepository: SimpleGalleryMediaRepository,
+        onStarted: () -> Unit = {},
+    )
+
+    /**
+     * Takes items out of review.
+     */
+    fun approveGalleryMedia(
         mediaUids: Collection<String>,
         currentMediaRepository: SimpleGalleryMediaRepository,
         onStarted: () -> Unit = {},

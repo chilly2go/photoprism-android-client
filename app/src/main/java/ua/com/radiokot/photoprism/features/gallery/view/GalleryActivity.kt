@@ -91,6 +91,12 @@ class GalleryActivity : BaseActivity() {
     private lateinit var rootView: ActivityGalleryBinding
     private lateinit var view: IncludeActivityGalleryContentBinding
     private val viewModel: GalleryViewModel by viewModel()
+    private val remoteActionsFeedbackView: GalleryMediaRemoteActionsFeedbackView by lazy {
+        GalleryMediaRemoteActionsFeedbackView(
+            viewModel = viewModel,
+            snackbarParent = { view.galleryRecyclerView },
+        )
+    }
     private val log = kLogger("GGalleryActivity")
     private var isBackButtonJustPressed = false
     private var isMovedBackByBackButton = false
@@ -303,6 +309,14 @@ class GalleryActivity : BaseActivity() {
         sessionCapabilitiesRepository?.capabilities?.observeOn(AndroidSchedulers.mainThread())?.subscribe(this) { capabilities ->
             updateMultipleSelectionMenuVisibility()
             navigationView.setPeopleVisible(capabilities.canSeePeople)
+            navigationView.setArchiveAndReviewVisible(
+                isArchiveVisible = capabilities.canArchive,
+                isReviewVisible = capabilities.canReview,
+            )
+        }
+
+        sessionCapabilitiesRepository?.counts?.observeOn(AndroidSchedulers.mainThread())?.subscribe(this) { counts ->
+            navigationView.setCounts(counts)
         }
 
         viewModel.itemScale.observeOnMain().subscribe(this) { itemScale ->
@@ -391,9 +405,6 @@ class GalleryActivity : BaseActivity() {
                 GalleryMediaRemoteActionsViewModel.Event.OpenAlbumForAddingSelection ->
                     openAddingDestinationAlbumSelection()
 
-                GalleryMediaRemoteActionsViewModel.Event.OpenDeletingConfirmationDialog ->
-                    openDeletingConfirmationDialog()
-
                 is GalleryMediaRemoteActionsViewModel.Event.ShowFloatingAddedToAlbumMessage ->
                     showFloatingMessage(
                         getString(
@@ -401,6 +412,9 @@ class GalleryActivity : BaseActivity() {
                             event.albumTitle,
                         )
                     )
+
+                else ->
+                    remoteActionsFeedbackView.show(event)
             }
 
             log.debug {
@@ -886,8 +900,10 @@ class GalleryActivity : BaseActivity() {
                 areUserSelectionItemsVisible && capabilities.canUpdateAlbums
             findItem(R.id.archive).isVisible =
                 areUserSelectionItemsVisible && capabilities.canArchive
-            // The library has nothing to restore, that's for the archive.
+            // The library has nothing to restore or approve,
+            // that's for the archive and the review.
             findItem(R.id.restore).isVisible = false
+            findItem(R.id.approve).isVisible = false
             findItem(R.id.delete).isVisible =
                 areUserSelectionItemsVisible && capabilities.canDelete
             findItem(R.id.add_to_favorites).isVisible =
@@ -1138,15 +1154,6 @@ class GalleryActivity : BaseActivity() {
         }
     }
 
-    private fun openDeletingConfirmationDialog() {
-        MaterialAlertDialogBuilder(this)
-            .setMessage(R.string.gallery_deleting_confirmation)
-            .setPositiveButton(R.string.delete) { _, _ ->
-                viewModel.onDeletingGalleryMediaConfirmed()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

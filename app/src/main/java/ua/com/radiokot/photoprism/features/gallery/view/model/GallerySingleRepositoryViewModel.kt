@@ -165,6 +165,12 @@ class GallerySingleRepositoryViewModel(
     private fun initCommon(
         repositoryParams: SimpleGalleryMediaRepository.Params,
     ) {
+        // The archive and the review change from everywhere,
+        // a list loaded before may be outdated.
+        if (repositoryParams.scope != SimpleGalleryMediaRepository.Params.Scope.DEFAULT) {
+            currentMediaRepository?.invalidate()
+        }
+
         subscribeToItemsOrder(
             initialRepositoryParams = repositoryParams,
         )
@@ -399,10 +405,29 @@ class GallerySingleRepositoryViewModel(
     }
 
     /**
-     * Whether the archive is shown instead of the library.
+     * Which part of the library is shown.
      */
-    val isArchive: Boolean
-        get() = currentMediaRepository?.params?.archived == true
+    val scope: SimpleGalleryMediaRepository.Params.Scope
+        get() = currentMediaRepository?.params?.scope
+            ?: SimpleGalleryMediaRepository.Params.Scope.DEFAULT
+
+    fun onApproveMultipleSelectionClicked() {
+        check(currentState is State.Selecting.ForUser) {
+            "Approve multiple selection button is only clickable when selecting"
+        }
+
+        check(selectedMediaByUid.isNotEmpty()) {
+            "Approve multiple selection button is only clickable when something is selected"
+        }
+
+        galleryMediaRemoteActionsViewModel.approveGalleryMedia(
+            mediaUids = selectedMediaByUid.keys.toList(),
+            currentMediaRepository = currentMediaRepository.checkNotNull {
+                "There must be a media repository to approve items from"
+            },
+            onStarted = ::switchToViewing,
+        )
+    }
 
     fun onRestoreMultipleSelectionClicked() {
         check(currentState is State.Selecting.ForUser) {

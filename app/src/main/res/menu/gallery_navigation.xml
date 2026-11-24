@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<menu xmlns:android="http://schemas.android.com/apk/res/android">
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
         android:id="@+id/all"
@@ -45,9 +46,17 @@
         android:title="@string/folders" />
 
     <item
+        android:id="@+id/review"
+        android:icon="@drawable/ic_review"
+        android:title="@string/review_title"
+        android:visible="false"
+        app:actionLayout="@layout/view_navigation_counter" />
+
+    <item
         android:id="@+id/archive"
         android:icon="@drawable/ic_archive"
-        android:title="@string/archive_title" />
+        android:title="@string/archive_title"
+        app:actionLayout="@layout/view_navigation_counter" />
 
     <item
         android:id="@+id/upload_queue"

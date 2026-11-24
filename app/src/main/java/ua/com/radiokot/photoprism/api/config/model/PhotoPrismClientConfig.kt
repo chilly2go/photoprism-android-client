@@ -31,7 +31,25 @@ constructor(
      */
     @JsonProperty("disable")
     val disable: Map<String, Boolean>? = null,
+    @JsonProperty("count")
+    val count: Counts? = null,
 ) {
+    data class Counts
+    @JsonCreator
+    constructor(
+        /**
+         * Photos of low quality, waiting to be approved or archived.
+         * Only counted when the review feature is on.
+         */
+        @JsonProperty("review")
+        val review: Int?,
+        /**
+         * Only counted when the archive feature is on.
+         */
+        @JsonProperty("archived")
+        val archived: Int?,
+    )
+
     data class Settings
     @JsonCreator
     constructor(
