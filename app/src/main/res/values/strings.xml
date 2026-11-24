@@ -503,7 +503,7 @@
 
     <!-- Archive and review -->
     <string name="review_title">Review</string>
-    <string name="review_subtitle">Doubtful quality: approve or archive</string>
+    <string name="review_subtitle">Approve or archive</string>
     <string name="archive_subtitle">Restore or delete forever</string>
     <string name="review_empty">Nothing to review</string>
     <string name="archive_empty">The archive is empty</string>

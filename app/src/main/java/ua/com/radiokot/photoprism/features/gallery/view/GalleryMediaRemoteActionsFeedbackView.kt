@@ -98,7 +98,7 @@ class GalleryMediaRemoteActionsFeedbackView(
         }
         val message = context.resources.getQuantityString(messageRes, event.count, event.count)
 
-        makeSnackbar(message, if (event.canUndo) Snackbar.LENGTH_LONG else Snackbar.LENGTH_SHORT)
+        makeSnackbar(message, if (event.canUndo) UNDO_DURATION_MS else Snackbar.LENGTH_SHORT)
             .apply {
                 if (event.canUndo) {
                     setAction(R.string.archive_undo) {
@@ -126,6 +126,13 @@ class GalleryMediaRemoteActionsFeedbackView(
             ?.apply {
                 setTint(MaterialColors.getColor(snackbarParent(), colorAttr))
             }
+
+    private companion object {
+        /**
+         * Long enough to notice the message and reach the undo button.
+         */
+        const val UNDO_DURATION_MS = 6000
+    }
 
     private fun makeSnackbar(message: String, duration: Int) =
         Snackbar.make(snackbarParent(), message, duration).apply {

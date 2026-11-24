@@ -500,8 +500,8 @@
 
     <!-- Archiv und Prüfen -->
     <string name="review_title">Prüfen</string>
-    <string name="review_subtitle">Fragliche Qualität: freigeben oder archivieren</string>
-    <string name="archive_subtitle">Wiederherstellen oder endgültig löschen</string>
+    <string name="review_subtitle">Freigeben oder archivieren</string>
+    <string name="archive_subtitle">Wiederherstellen oder löschen</string>
     <string name="review_empty">Nichts zu prüfen</string>
     <string name="archive_empty">Das Archiv ist leer</string>
     <string name="approve_action">Freigeben</string>

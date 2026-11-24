@@ -221,6 +221,7 @@ class GallerySingleRepositoryActivity : BaseActivity() {
                 viewModel.onClearSelectionClicked()
             }
 
+            applyScopeToSelectionMenu(menu)
             menu.showOverflowItemIcons(isBottomBar = true)
 
             setOnMenuItemClickListener { item ->
@@ -320,6 +321,40 @@ class GallerySingleRepositoryActivity : BaseActivity() {
         }.autoDispose(this)
     }
 
+    /**
+     * In the archive and the review, their own actions come first,
+     * and the bar has no room for more without hiding the count.
+     * Must be done before showing the overflow icons.
+     */
+    private fun applyScopeToSelectionMenu(menu: Menu) = with(menu) {
+        val scope = viewModel.scope
+        if (scope == SimpleGalleryMediaRepository.Params.Scope.DEFAULT) {
+            return@with
+        }
+
+        findItem(R.id.share).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+        findItem(R.id.download).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+
+        when (scope) {
+            SimpleGalleryMediaRepository.Params.Scope.REVIEW -> {
+                findItem(R.id.approve).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                findItem(R.id.archive).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            }
+
+            SimpleGalleryMediaRepository.Params.Scope.ARCHIVED -> {
+                findItem(R.id.restore).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                with(findItem(R.id.delete)) {
+                    setTitle(R.string.archive_delete_forever)
+                    setIcon(R.drawable.ic_delete_forever)
+                    setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                }
+            }
+
+            SimpleGalleryMediaRepository.Params.Scope.DEFAULT ->
+                Unit
+        }
+    }
+
     private fun updateMultipleSelectionMenuVisibility() {
         val capabilities = sessionCapabilitiesRepository?.current
             ?: SessionCapabilities.ASSUMED
@@ -339,33 +374,12 @@ class GallerySingleRepositoryActivity : BaseActivity() {
             val isReview = scope == SimpleGalleryMediaRepository.Params.Scope.REVIEW
             findItem(R.id.approve).isVisible =
                 areUserSelectionItemsVisible && capabilities.canReview && isReview
-            findItem(R.id.archive).apply {
-                isVisible = areUserSelectionItemsVisible && capabilities.canArchive && !isArchive
-                // Next to approving, archiving is what the review is for.
-                setShowAsAction(
-                    if (isReview)
-                        MenuItem.SHOW_AS_ACTION_ALWAYS
-                    else
-                        MenuItem.SHOW_AS_ACTION_NEVER
-                )
-            }
-            findItem(R.id.restore).apply {
-                isVisible = areUserSelectionItemsVisible && capabilities.canArchive && isArchive
-                setShowAsAction(
-                    if (isArchive)
-                        MenuItem.SHOW_AS_ACTION_ALWAYS
-                    else
-                        MenuItem.SHOW_AS_ACTION_NEVER
-                )
-            }
-            findItem(R.id.delete).apply {
-                isVisible = areUserSelectionItemsVisible && capabilities.canDelete
-                if (isArchive) {
-                    setTitle(R.string.archive_delete_forever)
-                    setIcon(R.drawable.ic_delete_forever)
-                    setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                }
-            }
+            findItem(R.id.archive).isVisible =
+                areUserSelectionItemsVisible && capabilities.canArchive && !isArchive
+            findItem(R.id.restore).isVisible =
+                areUserSelectionItemsVisible && capabilities.canArchive && isArchive
+            findItem(R.id.delete).isVisible =
+                areUserSelectionItemsVisible && capabilities.canDelete
             findItem(R.id.add_to_favorites).isVisible =
                 areUserSelectionItemsVisible && viewModel.canAddSelectedToFavorites
                         && capabilities.canSetFavorite

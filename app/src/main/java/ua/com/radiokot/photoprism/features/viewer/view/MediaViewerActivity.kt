@@ -555,6 +555,7 @@ class MediaViewerActivity : BaseActivity() {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.media_viewer, menu)
 
+        applyScopeToMenu(menu)
         menu.showOverflowItemIcons(isBottomBar = false)
 
         // Keyboard navigation focus workarounds.
@@ -605,23 +606,10 @@ class MediaViewerActivity : BaseActivity() {
             viewModel.areActionsEnabled && capabilities.canReview && isReview
         menu.findItem(R.id.archive).isVisible =
             viewModel.areActionsEnabled && capabilities.canArchive && !isArchive
-        with(menu.findItem(R.id.restore)) {
-            isVisible = viewModel.areActionsEnabled && capabilities.canArchive && isArchive
-            // Restoring is what the archive is for.
-            setShowAsAction(
-                if (isArchive)
-                    MenuItem.SHOW_AS_ACTION_IF_ROOM
-                else
-                    MenuItem.SHOW_AS_ACTION_NEVER
-            )
-        }
-        with(menu.findItem(R.id.delete)) {
-            isVisible = viewModel.areActionsEnabled && capabilities.canDelete
-            if (isArchive) {
-                setTitle(R.string.archive_delete_forever)
-                setIcon(R.drawable.ic_delete_forever)
-            }
-        }
+        menu.findItem(R.id.restore).isVisible =
+            viewModel.areActionsEnabled && capabilities.canArchive && isArchive
+        menu.findItem(R.id.delete).isVisible =
+            viewModel.areActionsEnabled && capabilities.canDelete
 
         with(menu.findItem(R.id.is_private)) {
             isVisible = viewModel.areActionsEnabled && capabilities.canSetPrivate
@@ -639,6 +627,31 @@ class MediaViewerActivity : BaseActivity() {
         }
 
         return super.onCreateOptionsMenu(menu)
+    }
+
+    /**
+     * In the archive and the review, their own action takes the place of the slideshow.
+     * Must be done before showing the overflow icons.
+     */
+    private fun applyScopeToMenu(menu: Menu) {
+        when (viewModel.scope) {
+            SimpleGalleryMediaRepository.Params.Scope.REVIEW -> {
+                menu.findItem(R.id.approve).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                menu.findItem(R.id.start_slideshow).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+            }
+
+            SimpleGalleryMediaRepository.Params.Scope.ARCHIVED -> {
+                menu.findItem(R.id.restore).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                menu.findItem(R.id.start_slideshow).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+                with(menu.findItem(R.id.delete)) {
+                    setTitle(R.string.archive_delete_forever)
+                    setIcon(R.drawable.ic_delete_forever)
+                }
+            }
+
+            SimpleGalleryMediaRepository.Params.Scope.DEFAULT ->
+                Unit
+        }
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
