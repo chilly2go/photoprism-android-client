@@ -404,16 +404,13 @@ class FaceFramesLayout private constructor(
     // endregion
 
     // region Touch
-    override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
+    /**
+     * Watches every touch for a tap on a frame here, as the photo view
+     * disallows intercepting once it gets a touch.
+     */
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         if (draftArea != null) {
-            // Dragging the draft is taken, the rest goes to the photo.
-            val isDragging = event.actionMasked == MotionEvent.ACTION_DOWN
-                    && startDraftDragIfHit(event.x, event.y)
-            if (isDragging) {
-                // Not to let the pager swipe.
-                parent?.requestDisallowInterceptTouchEvent(true)
-            }
-            return isDragging
+            return super.dispatchTouchEvent(event)
         }
 
         when (event.actionMasked) {
@@ -437,15 +434,34 @@ class FaceFramesLayout private constructor(
                 val face = tappedFace
                 tappedFace = null
                 if (face != null && event.eventTime - downTime < tapTimeout) {
-                    // Taking the tap cancels it for the photo view,
+                    // Cancelling the tap for the photo view,
                     // so it doesn't toggle the full screen.
+                    val cancel = MotionEvent.obtain(event)
+                    cancel.action = MotionEvent.ACTION_CANCEL
+                    super.dispatchTouchEvent(cancel)
+                    cancel.recycle()
                     onFaceClicked?.invoke(face)
                     return true
                 }
             }
         }
 
-        return false
+        return super.dispatchTouchEvent(event)
+    }
+
+    override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
+        if (draftArea == null) {
+            return false
+        }
+
+        // Dragging the draft is taken, the rest goes to the photo.
+        val isDragging = event.actionMasked == MotionEvent.ACTION_DOWN
+                && startDraftDragIfHit(event.x, event.y)
+        if (isDragging) {
+            // Not to let the pager swipe.
+            parent?.requestDisallowInterceptTouchEvent(true)
+        }
+        return isDragging
     }
 
     @SuppressLint("ClickableViewAccessibility")

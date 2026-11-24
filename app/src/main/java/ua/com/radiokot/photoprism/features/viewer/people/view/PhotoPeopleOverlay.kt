@@ -39,6 +39,7 @@ import ua.com.radiokot.photoprism.features.viewer.people.view.model.PhotoPeopleV
 import ua.com.radiokot.photoprism.features.viewer.view.model.FadeEndLivePhotoViewerPage
 import ua.com.radiokot.photoprism.features.viewer.view.model.ImageViewerPage
 import ua.com.radiokot.photoprism.features.viewer.view.model.MediaViewerPage
+import ua.com.radiokot.photoprism.features.viewer.view.model.VideoViewerPage
 import ua.com.radiokot.photoprism.util.images.ImageTransformations
 
 /**
@@ -305,6 +306,13 @@ class PhotoPeopleOverlay(
      */
     private fun attachToCurrentPage() {
         val isEnabled = viewModel.isEnabled.value == true
+
+        // Keep the strip off the video player controls.
+        strip.root.translationY =
+            if (pageAt(viewPager.currentItem) is VideoViewerPage)
+                -VIDEO_CONTROLS_HEIGHT_DP * activity.resources.displayMetrics.density
+            else
+                0f
         val photoView = when (
             val viewHolder = viewPager.recyclerView
                 .findViewHolderForAdapterPosition(viewPager.currentItem)
@@ -568,5 +576,6 @@ class PhotoPeopleOverlay(
         private const val NAME_REQUEST_KEY = "photo_people_name"
         private const val NEW_FACE_NAME_REQUEST_KEY = "photo_people_new_face_name"
         private const val UNDO_SNACKBAR_DURATION_MS = 8000
+        private const val VIDEO_CONTROLS_HEIGHT_DP = 56f
     }
 }
