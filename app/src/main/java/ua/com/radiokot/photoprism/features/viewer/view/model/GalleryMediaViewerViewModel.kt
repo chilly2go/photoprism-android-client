@@ -506,6 +506,12 @@ class GalleryMediaViewerViewModel(
         )
     }
 
+    fun onPeopleClicked() {
+        log.debug { "onPeopleClicked(): toggling_people" }
+
+        eventsSubject.onNext(Event.TogglePeople)
+    }
+
     fun onPageClicked() {
         log.debug { "onPageClicked(): toggling_full_screen" }
 
@@ -734,6 +740,7 @@ class GalleryMediaViewerViewModel(
         ) : Event
 
         object Finish : Event
+        object TogglePeople : Event
 
         /**
          * Show a dismissible floating error.

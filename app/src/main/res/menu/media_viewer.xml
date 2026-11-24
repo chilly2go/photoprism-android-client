@@ -12,6 +12,15 @@
         tools:ignore="PrivateResource" />
 
     <item
+        android:id="@+id/people_in_photo"
+        android:checkable="true"
+        android:icon="@drawable/ic_face"
+        android:title="@string/photo_people_show"
+        android:visible="false"
+        app:iconTint="?colorOnSurfaceVariant"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/open_in"
         android:icon="@drawable/ic_open_in"
         android:title="@string/open_with"

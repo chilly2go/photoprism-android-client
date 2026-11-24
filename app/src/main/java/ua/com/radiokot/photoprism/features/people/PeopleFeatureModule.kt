@@ -17,6 +17,9 @@ import ua.com.radiokot.photoprism.features.people.logic.SetPersonHiddenUseCase
 import ua.com.radiokot.photoprism.features.people.view.model.PeopleSelectionViewModel
 import ua.com.radiokot.photoprism.features.people.view.model.PeopleViewModel
 import org.koin.core.module.dsl.factoryOf
+import ua.com.radiokot.photoprism.features.viewer.people.logic.ChangePhotoFaceUseCase
+import ua.com.radiokot.photoprism.features.viewer.people.logic.GetPhotoFacesUseCase
+import ua.com.radiokot.photoprism.features.viewer.people.view.model.PhotoPeopleViewModel
 
 val peopleFeatureModule = module {
 
@@ -55,6 +58,20 @@ val peopleFeatureModule = module {
                 searchPredicate = { person: Person, query: String ->
                     SearchPredicates.generalCondition(query, person.name)
                 },
+                previewUrlFactory = get(),
+            )
+        }
+
+        // People in the photo, for the media viewer.
+        factoryOf(::GetPhotoFacesUseCase)
+        factoryOf(::ChangePhotoFaceUseCase)
+        viewModel {
+            PhotoPeopleViewModel(
+                getPhotoFacesUseCase = get(),
+                changePhotoFaceUseCase = get(),
+                namedPeopleRepository = get(),
+                peopleRepository = get(),
+                sessionCapabilitiesRepository = getOrNull(),
                 previewUrlFactory = get(),
             )
         }

@@ -32,6 +32,9 @@ class NameFaceDialogFragment : DialogFragment() {
         val markerUid = args.getString(MARKER_UID_KEY)!!
         val thumbnailUrl = args.getString(THUMBNAIL_URL_KEY)
         val suggestions = args.getStringArrayList(SUGGESTIONS_KEY) ?: arrayListOf()
+        val initialName = args.getString(INITIAL_NAME_KEY)
+        val isForCluster = args.getBoolean(IS_FOR_CLUSTER_KEY, true)
+        val requestKey = args.getString(REQUEST_KEY_KEY) ?: REQUEST_KEY
 
         val view = DialogNameFaceBinding.inflate(layoutInflater)
 
@@ -52,13 +55,19 @@ class NameFaceDialogFragment : DialogFragment() {
             ArrayAdapter(
                 requireContext(),
                 android.R.layout.simple_dropdown_item_1line,
-                suggestions,
+                suggestions.filter { it != initialName },
             )
         )
 
+        if (initialName != null && savedInstanceState == null) {
+            view.nameEditText.setText(initialName)
+            view.nameEditText.setSelection(initialName.length)
+        }
+        view.showPhotosButton.isVisible = isForCluster
+
         fun deliver(action: String) {
             setFragmentResult(
-                REQUEST_KEY,
+                requestKey,
                 bundleOf(
                     RESULT_ACTION to action,
                     RESULT_FACE_ID to faceId,
@@ -79,10 +88,16 @@ class NameFaceDialogFragment : DialogFragment() {
             .setPositiveButton(R.string.save) { _, _ ->
                 deliver(ACTION_NAME)
             }
-            .setNeutralButton(R.string.people_overview_hide) { _, _ ->
-                deliver(ACTION_HIDE)
+            .apply {
+                if (isForCluster) {
+                    setNeutralButton(R.string.people_overview_hide) { _, _ ->
+                        deliver(ACTION_HIDE)
+                    }
+                }
             }
-            .setNegativeButton(R.string.cancel, null)
+            .setNegativeButton(R.string.cancel) { _, _ ->
+                deliver(ACTION_CANCEL)
+            }
             .create()
 
         dialog.setOnShowListener {
@@ -121,23 +136,40 @@ class NameFaceDialogFragment : DialogFragment() {
         const val ACTION_NAME = "name"
         const val ACTION_HIDE = "hide"
         const val ACTION_SHOW_PHOTOS = "show_photos"
+        const val ACTION_CANCEL = "cancel"
 
         private const val FACE_ID_KEY = "face_id"
         private const val MARKER_UID_KEY = "marker_uid"
         private const val THUMBNAIL_URL_KEY = "thumbnail_url"
         private const val SUGGESTIONS_KEY = "suggestions"
+        private const val INITIAL_NAME_KEY = "initial_name"
+        private const val IS_FOR_CLUSTER_KEY = "is_for_cluster"
+        private const val REQUEST_KEY_KEY = "request_key"
 
         fun newInstance(
             faceId: String,
             markerUid: String,
             thumbnailUrl: String?,
             nameSuggestions: List<String>,
+            /**
+             * A name to start with, for correcting it.
+             */
+            initialName: String? = null,
+            /**
+             * Whether the face is an unnamed cluster, which can be hidden
+             * and whose photos can be seen.
+             */
+            isForCluster: Boolean = true,
+            requestKey: String = REQUEST_KEY,
         ) = NameFaceDialogFragment().apply {
             arguments = bundleOf(
                 FACE_ID_KEY to faceId,
                 MARKER_UID_KEY to markerUid,
                 THUMBNAIL_URL_KEY to thumbnailUrl,
                 SUGGESTIONS_KEY to ArrayList(nameSuggestions),
+                INITIAL_NAME_KEY to initialName,
+                IS_FOR_CLUSTER_KEY to isForCluster,
+                REQUEST_KEY_KEY to requestKey,
             )
         }
     }
